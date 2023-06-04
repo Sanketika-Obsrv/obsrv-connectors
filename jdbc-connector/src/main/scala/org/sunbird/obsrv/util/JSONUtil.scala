@@ -20,30 +20,17 @@ object JSONUtil {
 
   mapper.setSerializationInclusion(Include.NON_NULL)
 
-  def generateJSON(data : DataFrame) : Dataset[String] = {
-    val columnTypes = data.dtypes.toMap
-    data.select(data.columns.map(columnName => {
-      val columnType = columnTypes(columnName)
-      val castedColumn = columnType match {
-        case "StringType" => col(columnName).cast(StringType)
-        case "IntegerType" => col(columnName).cast(IntegerType)
-        case "DoubleType" => col(columnName).cast(DoubleType)
-        case "BooleanType" => col(columnName).cast(BooleanType)
-        case "LongType" => col(columnName).cast(LongType)
-        case "ShortType" => col(columnName).cast(ShortType)
-        case "ByteType" => col(columnName).cast(ByteType)
-        case "FloatType" => col(columnName).cast(FloatType)
-        case "DecimalType" => col(columnName).cast(DecimalType.SYSTEM_DEFAULT)
-        case "TimestampType" => col(columnName).cast(TimestampType)
-        case "DateType" => col(columnName).cast(DateType)
-        case _ => col(columnName) // No casting for unknown types
-      }
-      castedColumn.alias(columnName)
-    }): _*).asInstanceOf[Dataset[String]].toJSON
-  }
+    def parseRecords(data : DataFrame) : List[Map[String, Any]] = {
+      val jsonData = data.toJSON.collect().toList
+      jsonData.map { jsonString => deserialize(jsonString, classOf[Map[String, Any]])}
+    }
 
   def serialize(obj: AnyRef): String = {
     mapper.writeValueAsString(obj)
+  }
+
+  def deserialize[T](json: String, clazz: Class[T]): T = {
+    mapper.readValue(json, clazz);
   }
 
 }

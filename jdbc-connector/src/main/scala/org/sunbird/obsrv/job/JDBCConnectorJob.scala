@@ -83,9 +83,8 @@ object JDBCConnectorJob {
 
         val batchReadTime = System.currentTimeMillis() - readStartTime
         data.show()
-
-        val jsonDataSet = JSONUtil.generateJSON(data)
-        kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, jsonDataSet.collect().toList), "spark.test")
+        val records = JSONUtil.parseRecords(data)
+        kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
 
         val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
         DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length, batchReadTime)
