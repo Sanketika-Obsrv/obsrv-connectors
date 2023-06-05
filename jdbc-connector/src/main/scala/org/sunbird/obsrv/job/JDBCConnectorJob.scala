@@ -1,15 +1,13 @@
 package org.sunbird.obsrv.job
 
 import org.apache.log4j.{LogManager, Logger}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.helper.EventGenerator
 import org.sunbird.obsrv.registry.DatasetRegistry
 import org.sunbird.obsrv.util.JSONUtil
 
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
-import java.util.Date
 import scala.util.control.Breaks.{break, breakable}
 import scala.util.{Failure, Try}
 
@@ -25,13 +23,8 @@ object JDBCConnectorJob {
     val connectorConfig = dsSourceConfig.connectorConfig
     val connectorStats = dsSourceConfig.connectorStats
     var eventCount = 0
-    Console.println("dataset " + dataset.datasetConfig)
-    Console.println("connector " + connectorConfig)
-    Console.println("connector " + connectorStats)
-    //val dataset =  DatasetConfig("", "created_on", "spark.test", None, None,None,None)
-//    val connectorConfig = ConnectorConfig("localhost:9092", "test", "postgres",
-//      "postgres", "localhost", 5432, "postgres", "user_table",
-//      10, 5, "postgresql", Timestamp.valueOf("2023-06-02 18:36:02.264"))
+    Console.println("dataset " + dataset.datasetConfig + " connector " + connectorConfig + " connector " + connectorStats)
+
 
     val spark = SparkSession.builder()
       .appName("JDBC Connector Batch Job")
@@ -84,11 +77,10 @@ object JDBCConnectorJob {
         val batchReadTime = System.currentTimeMillis() - readStartTime
         data.show()
         val records = JSONUtil.parseRecords(data)
-        kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
-
         val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
-        DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length, batchReadTime)
         eventCount += data.collect().length
+        kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
+        DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length, batchReadTime)
         logger.info(s"Batch ${batch + 1} is processed successfully :: Number of records pulled: ${data.collect().length} :: Batch Read Time: ${batchReadTime}")
 
         // Sleep for the specified delay between batches
