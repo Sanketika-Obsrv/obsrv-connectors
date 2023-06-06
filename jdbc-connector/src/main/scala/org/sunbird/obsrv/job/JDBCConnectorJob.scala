@@ -3,13 +3,10 @@ package org.sunbird.obsrv.job
 import org.apache.log4j.{LogManager, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
-import org.sunbird.obsrv.helper.EventGenerator
+import org.sunbird.obsrv.helper.ConnectorHelper
 import org.sunbird.obsrv.registry.DatasetRegistry
-import org.sunbird.obsrv.util.JSONUtil
 
-import java.sql.Timestamp
 import scala.util.control.Breaks.{break, breakable}
-import scala.util.{Failure, Try}
 
 object JDBCConnectorJob {
 
@@ -20,78 +17,36 @@ object JDBCConnectorJob {
     val kafkaClient = new KafkaClient(config)
     val dataset = DatasetRegistry.getDataset(config.datasetId).get
     val dsSourceConfig = DatasetRegistry.getDatasetSourceConfigById(config.datasetId)
-    val connectorConfig = dsSourceConfig.connectorConfig
-    val connectorStats = dsSourceConfig.connectorStats
+    val helper = new ConnectorHelper(config)
+    val delayMs = (60 * 1000) / dsSourceConfig.connectorConfig.jdbcBatchesPerMinute
+    var batch = 0
     var eventCount = 0
-    Console.println("dataset " + dataset.datasetConfig + " connector " + connectorConfig + " connector " + connectorStats)
-
+    Console.println("dataset " + dataset.datasetConfig + " connector " + dsSourceConfig.connectorConfig + " connector " + dsSourceConfig.connectorStats)
 
     val spark = SparkSession.builder()
       .appName("JDBC Connector Batch Job")
       .master(config.sparkMasterUrl)
       .getOrCreate()
 
-    val jdbcUrl = s"jdbc:${connectorConfig.jdbcDatabaseType}://${connectorConfig.jdbcHost}:${connectorConfig.jdbcPort}/${connectorConfig.jdbcDatabase}"
-    val delayMs = (60 * 1000) / connectorConfig.jdbcBatchesPerMinute
-    var retryCount = 0
-    var batch = 0
-
     breakable {
       while (true) {
-        logger.info(s"Pulling batch: ${batch + 1}")
-        val offset = batch * connectorConfig.jdbcBatchSize
-        var query: String = null
-        val readStartTime = System.currentTimeMillis()
-        if (connectorStats.lastFetchTimestamp == null) {
-          query = s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
-        } else {
-          query = s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} WHERE ${dataset.datasetConfig.tsKey} > '${connectorStats.lastFetchTimestamp}' LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
-        }
-        var data: DataFrame = null
-        while (retryCount < config.jdbcConnectionRetry && data == null) {
-          val connectionResult = Try {
-            spark.read.format("jdbc")
-              .option("url", jdbcUrl)
-              .option("user", connectorConfig.jdbcUser)
-              .option("password", connectorConfig.jdbcPassword)
-              .option("query", query)
-              .load()
-          }
-
-          connectionResult match {
-            case Failure(exception) =>
-              logger.error(s"Database Connection failed. Retrying (${retryCount + 1}/${config.jdbcConnectionRetry})...", exception)
-              Thread.sleep(config.jdbcConnectionRetryDelay)
-              retryCount += 1
-              if (retryCount == config.jdbcConnectionRetry) break;
-            case util.Success(df) =>
-              data = df
-          }
-        }
-
+        val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dsSourceConfig, dataset, batch)
         if (data.collect().length == 0) {
-          logger.info("All the records are pulled...")
           break
+        } else {
+          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime)
+          eventCount += data.collect().length
+          batch += 1
+          // Sleep for the specified delay between batches
+          Thread.sleep(delayMs)
         }
-
-        val batchReadTime = System.currentTimeMillis() - readStartTime
-        data.show()
-        val records = JSONUtil.parseRecords(data)
-        val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
-        eventCount += data.collect().length
-        kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
-        DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length, batchReadTime)
-        logger.info(s"Batch ${batch + 1} is processed successfully :: Number of records pulled: ${data.collect().length} :: Batch Read Time: ${batchReadTime}")
-
-        // Sleep for the specified delay between batches
-        Thread.sleep(delayMs)
-        batch += 1
       }
     }
 
-    logger.info(s"Total number of records are pulled: ${eventCount}")
+    logger.info(s"Total number of records are pulled: $eventCount")
     spark.stop()
   }
+
 
 }
 
