@@ -1,5 +1,6 @@
 package org.sunbird.obsrv.job
 
+import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{LogManager, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
@@ -13,7 +14,8 @@ object JDBCConnectorJob {
   private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
 
   def main(args: Array[String]): Unit = {
-    val config = new JDBCConnectorConfig()
+    val appConfig = ConfigFactory.load("application.conf").withFallback(ConfigFactory.systemEnvironment())
+    val config = new JDBCConnectorConfig(appConfig, args)
     val kafkaClient = new KafkaClient(config)
     val dataset = DatasetRegistry.getDataset(config.datasetId).get
     val dsSourceConfig = DatasetRegistry.getDatasetSourceConfigById(config.datasetId)
@@ -21,7 +23,6 @@ object JDBCConnectorJob {
     val delayMs = (60 * 1000) / dsSourceConfig.connectorConfig.jdbcBatchesPerMinute
     var batch = 0
     var eventCount = 0
-    Console.println("dataset " + dataset.datasetConfig + " connector " + dsSourceConfig.connectorConfig + " connector " + dsSourceConfig.connectorStats)
 
     val spark = SparkSession.builder()
       .appName("JDBC Connector Batch Job")
@@ -31,12 +32,14 @@ object JDBCConnectorJob {
     breakable {
       while (true) {
         val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dsSourceConfig, dataset, batch)
+        data.show()
+        batch += 1
         if (data.collect().length == 0) {
+          DatasetRegistry.updateConnectorAvgBatchReadTime(config.datasetId, batchReadTime/batch)
           break
         } else {
           helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime)
           eventCount += data.collect().length
-          batch += 1
           // Sleep for the specified delay between batches
           Thread.sleep(delayMs)
         }
@@ -46,7 +49,5 @@ object JDBCConnectorJob {
     logger.info(s"Total number of records are pulled: $eventCount")
     spark.stop()
   }
-
-
 }
 

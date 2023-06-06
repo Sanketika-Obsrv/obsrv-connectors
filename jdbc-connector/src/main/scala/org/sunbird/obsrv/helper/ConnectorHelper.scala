@@ -21,12 +21,13 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     val connectorConfig = dsSourceConfig.connectorConfig
     val connectorStats = dsSourceConfig.connectorStats
     val jdbcUrl = s"jdbc:${connectorConfig.jdbcDatabaseType}://${connectorConfig.jdbcHost}:${connectorConfig.jdbcPort}/${connectorConfig.jdbcDatabase}"
-    val query: String = getQuery(connectorStats, connectorConfig, dataset, batch * connectorConfig.jdbcBatchSize)
+    val offset = batch * connectorConfig.jdbcBatchSize
+    val query: String = getQuery(connectorStats, connectorConfig, dataset, offset)
     var data: DataFrame = null
     var batchReadTime: Long = 0
     var retryCount = 0
 
-    logger.info(s"Started pulling batch: ${batch + 1}")
+    logger.info(s"Started pulling batch ${batch + 1}")
 
     while (retryCount < config.jdbcConnectionRetry && data == null) {
       val connectionResult = Try {
@@ -37,16 +38,17 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
           .option("password", connectorConfig.jdbcPassword)
           .option("query", query)
           .load()
-        batchReadTime = System.currentTimeMillis() - readStartTime
+        batchReadTime += System.currentTimeMillis() - readStartTime
         result
       }
 
       connectionResult match {
         case Failure(exception) =>
           logger.error(s"Database Connection failed. Retrying (${retryCount + 1}/${config.jdbcConnectionRetry})...", exception)
-          Thread.sleep(config.jdbcConnectionRetryDelay)
           retryCount += 1
-          if (retryCount == config.jdbcConnectionRetry) break;
+          DatasetRegistry.updateConnectorDisconnections(config.datasetId, retryCount)
+          if (retryCount == config.jdbcConnectionRetry) break
+          Thread.sleep(config.jdbcConnectionRetryDelay)
         case util.Success(df) =>
           data = df
       }
@@ -58,8 +60,8 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     val records = JSONUtil.parseRecords(data)
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
     kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
-    DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length, batchReadTime)
-    logger.info(s"Batch ${batch + 1} is processed successfully :: Number of records pulled: ${data.collect().length} :: Batch Read Time: $batchReadTime")
+    DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length)
+    logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.collect().length} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
   def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {

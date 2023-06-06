@@ -2,12 +2,10 @@ package org.sunbird.obsrv.util
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonGenerator.Feature
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper, SerializationFeature}
 import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.databind.{DeserializationFeature, SerializationFeature}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 
 object JSONUtil {
 
@@ -20,10 +18,10 @@ object JSONUtil {
 
   mapper.setSerializationInclusion(Include.NON_NULL)
 
-    def parseRecords(data : DataFrame) : List[Map[String, Any]] = {
-      val jsonData = data.toJSON.collect().toList
-      jsonData.map { jsonString => deserialize(jsonString, classOf[Map[String, Any]])}
-    }
+  def parseRecords(data: DataFrame): List[Map[String, Any]] = {
+    val jsonData = data.toJSON.collect().toList
+    jsonData.map { jsonString => deserialize(jsonString, classOf[Map[String, Any]]) }
+  }
 
   def serialize(obj: AnyRef): String = {
     mapper.writeValueAsString(obj)

@@ -1,14 +1,16 @@
 package org.sunbird.obsrv.job
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.Config
 
-class JDBCConnectorConfig (){
+class JDBCConnectorConfig (config: Config, args: Array[String]){
 
-  private val config = ConfigFactory.load("application.conf").withFallback(ConfigFactory.systemEnvironment())
+  if (args.length == 0)
+    throw new Exception("Please provide arguments..")
 
+  val datasetId: String = args(0)
   val kafkaServerUrl: String = config.getString("kafka.broker-servers")
-  val datasetId: String = config.getString("datasetId")
   val sparkMasterUrl: String = config.getString("spark.master.url")
   val jdbcConnectionRetry: Int = config.getInt("jdbc.connection.retry")
   val jdbcConnectionRetryDelay: Int = config.getInt("jdbc.connection.retryDelay")
+
 }
