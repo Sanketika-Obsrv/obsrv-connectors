@@ -32,7 +32,6 @@ object JDBCConnectorJob {
     breakable {
       while (true) {
         val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dsSourceConfig, dataset, batch)
-        data.show()
         batch += 1
         if (data.collect().length == 0) {
           DatasetRegistry.updateConnectorAvgBatchReadTime(config.datasetId, batchReadTime/batch)
