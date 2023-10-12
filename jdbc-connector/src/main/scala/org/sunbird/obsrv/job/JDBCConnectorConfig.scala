@@ -5,7 +5,7 @@ import com.typesafe.config.Config
 class JDBCConnectorConfig (config: Config, args: Array[String]){
 
   if (args.length == 0)
-    throw new Exception("Please provide arguments..")
+    throw new Exception("Please provide dataset id as argument..")
 
   val datasetId: String = args(0)
   val kafkaServerUrl: String = config.getString("kafka.broker-servers")
