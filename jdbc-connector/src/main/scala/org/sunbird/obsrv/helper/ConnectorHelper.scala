@@ -46,7 +46,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
         case Failure(exception) =>
           logger.error(s"Database Connection failed. Retrying (${retryCount + 1}/${config.jdbcConnectionRetry})...", exception)
           retryCount += 1
-          DatasetRegistry.updateConnectorDisconnections(dsSourceConfig.datasetId, retryCount)
+          DatasetRegistry.updateConnectorDisconnections(config.datasetId, retryCount)
           if (retryCount == config.jdbcConnectionRetry) break
           Thread.sleep(config.jdbcConnectionRetryDelay)
         case util.Success(df) =>
@@ -60,16 +60,16 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     val records = JSONUtil.parseRecords(data)
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
     pushToKafka(config, kafkaClient, dataset, records, dsSourceConfig)
-    DatasetRegistry.updateConnectorStats(dsSourceConfig.datasetId, lastRowTimestamp, data.collect().length)
+    DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length)
     logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.collect().length} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
   def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
     if (dataset.extractionConfig.get.isBatchEvent.get) {
-      kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, records, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
+      kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
     } else {
       records.foreach(record => {
-        kafkaClient.send(EventGenerator.getSingleEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config), config.ingestTopic)
+        kafkaClient.send(EventGenerator.getSingleEvent(config.datasetId, record, dsSourceConfig, config), config.ingestTopic)
       })
     }
   }
