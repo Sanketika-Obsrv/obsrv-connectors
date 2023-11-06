@@ -37,7 +37,7 @@ object JDBCConnectorJob {
           DatasetRegistry.updateConnectorAvgBatchReadTime(config.datasetId, batchReadTime/batch)
           break
         } else {
-          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime)
+          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dsSourceConfig)
           eventCount += data.collect().length
           // Sleep for the specified delay between batches
           Thread.sleep(delayMs)

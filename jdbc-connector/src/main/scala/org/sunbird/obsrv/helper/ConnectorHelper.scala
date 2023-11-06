@@ -56,12 +56,22 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     (data, batchReadTime)
   }
 
-  def processRecords(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, batchReadTime: Long): Unit = {
+  def processRecords(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, batchReadTime: Long, dsSourceConfig: DatasetSourceConfig): Unit = {
     val records = JSONUtil.parseRecords(data)
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
-    kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records), "spark.test")
+    pushToKafka(config, kafkaClient, dataset, records, dsSourceConfig)
     DatasetRegistry.updateConnectorStats(config.datasetId, lastRowTimestamp, data.collect().length)
     logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.collect().length} :: Avg Batch Read Time: ${batchReadTime/batch}")
+  }
+
+  def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
+    if (dataset.extractionConfig.get.isBatchEvent.get) {
+      kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records, dsSourceConfig, config), config.ingestTopic)
+    } else {
+      records.foreach(record => {
+        kafkaClient.send(EventGenerator.getSingleEvent(config.datasetId, record, dsSourceConfig, config), config.ingestTopic)
+      })
+    }
   }
 
   def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {

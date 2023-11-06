@@ -1,21 +1,56 @@
 package org.sunbird.obsrv.helper
 
+import org.sunbird.obsrv.job.JDBCConnectorConfig
+import org.sunbird.obsrv.model.DatasetModels
+import org.sunbird.obsrv.model.DatasetModels.DatasetSourceConfig
 import org.sunbird.obsrv.util.JSONUtil
 
 import java.util.UUID
+import scala.collection.mutable
 
-case class BatchEvent(id: String, mid: String, dataset: String, events: List[Map[String, Any]], syncts: Long)
+case class BatchEvent(id: String, mid: String, dataset: String, events: List[Map[String, Any]], syncts: Long, obsrv_meta: mutable.Map[String,Any])
+case class SingleEvent(dataset: String, event: Map[String, Any], syncts: Long, obsrv_meta: mutable.Map[String,Any])
 
 object EventGenerator {
 
-  def getBatchEvent(datasetId: String, records: List[Map[String, Any]]): String = {
+  def getBatchEvent(datasetId: String, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): String = {
     val event = BatchEvent(UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       datasetId,
       records,
-      System.currentTimeMillis()
+      System.currentTimeMillis(),
+      getObsrvMeta(dsSourceConfig, config)
     )
     JSONUtil.serialize(event)
+  }
+
+
+  def getSingleEvent(datasetId: String, record: Map[String, Any], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): String = {
+    val event = SingleEvent(
+      datasetId,
+      record,
+      System.currentTimeMillis(),
+      getObsrvMeta(dsSourceConfig, config)
+    )
+    JSONUtil.serialize(event)
+  }
+
+  def getObsrvMeta(dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): mutable.Map[String,Any] = {
+    val obsrvMeta = mutable.Map[String,Any]()
+    obsrvMeta.put("syncts", System.currentTimeMillis())
+    obsrvMeta.put("flags", Map())
+    obsrvMeta.put("timespans", Map())
+    obsrvMeta.put("error", Map())
+    obsrvMeta.put("source", Map(
+      "meta" -> Map(
+        "id" -> dsSourceConfig.id,
+        "connector_type" -> "jdbc",
+        "version" -> config.connectorVersion,
+        "entry_source" -> dsSourceConfig.connectorConfig.jdbcDatabaseTable
+      ),
+      "trace_id" -> UUID.randomUUID().toString
+    ))
+    obsrvMeta
   }
 
 }

@@ -12,5 +12,7 @@ class JDBCConnectorConfig (config: Config, args: Array[String]){
   val sparkMasterUrl: String = config.getString("spark.master.url")
   val jdbcConnectionRetry: Int = config.getInt("jdbc.connection.retry")
   val jdbcConnectionRetryDelay: Int = config.getInt("jdbc.connection.retryDelay")
+  val ingestTopic: String = config.getString("kafka.topic.ingest")
+  val connectorVersion: String = config.getString("connector.version")
 
 }
