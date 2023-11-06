@@ -8,18 +8,17 @@ import org.sunbird.obsrv.util.JSONUtil
 import java.util.UUID
 import scala.collection.mutable
 
-case class BatchEvent(id: String, mid: String, dataset: String, events: List[Map[String, Any]], syncts: Long, obsrv_meta: mutable.Map[String,Any])
 case class SingleEvent(dataset: String, event: Map[String, Any], syncts: Long, obsrv_meta: mutable.Map[String,Any])
 
 object EventGenerator {
 
-  def getBatchEvent(datasetId: String, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): String = {
-    val event = BatchEvent(UUID.randomUUID().toString,
-      UUID.randomUUID().toString,
-      datasetId,
-      records,
-      System.currentTimeMillis(),
-      getObsrvMeta(dsSourceConfig, config)
+  def getBatchEvent(datasetId: String, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig, extractionKey: String): String = {
+    val event = Map(
+      "id" -> UUID.randomUUID().toString,
+      "dataset" -> datasetId,
+      extractionKey -> records,
+      "syncts" -> System.currentTimeMillis(),
+      "obsrv_meta" -> getObsrvMeta(dsSourceConfig, config)
     )
     JSONUtil.serialize(event)
   }

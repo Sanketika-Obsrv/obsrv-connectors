@@ -66,7 +66,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
 
   def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
     if (dataset.extractionConfig.get.isBatchEvent.get) {
-      kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records, dsSourceConfig, config), config.ingestTopic)
+      kafkaClient.send(EventGenerator.getBatchEvent(config.datasetId, records, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
     } else {
       records.foreach(record => {
         kafkaClient.send(EventGenerator.getSingleEvent(config.datasetId, record, dsSourceConfig, config), config.ingestTopic)
