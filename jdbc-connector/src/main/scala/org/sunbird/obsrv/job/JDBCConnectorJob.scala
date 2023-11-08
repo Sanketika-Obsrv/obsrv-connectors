@@ -1,15 +1,17 @@
 package org.sunbird.obsrv.job
 
 import com.typesafe.config.ConfigFactory
-import org.apache.log4j.{LogManager, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.helper.ConnectorHelper
+import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.registry.DatasetRegistry
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 
 import scala.util.control.Breaks.{break, breakable}
 
-object JDBCConnectorJob {
+object JDBCConnectorJob extends Serializable {
 
   private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
 
@@ -17,36 +19,51 @@ object JDBCConnectorJob {
     val appConfig = ConfigFactory.load("application.conf").withFallback(ConfigFactory.systemEnvironment())
     val config = new JDBCConnectorConfig(appConfig, args)
     val kafkaClient = new KafkaClient(config)
-    val dataset = DatasetRegistry.getDataset(config.datasetId).get
-    val dsSourceConfig = DatasetRegistry.getDatasetSourceConfigById(config.datasetId)
     val helper = new ConnectorHelper(config)
-    val delayMs = (60 * 1000) / dsSourceConfig.connectorConfig.jdbcBatchesPerMinute
-    var batch = 0
-    var eventCount = 0
+    val dsSourceConfigList =  DatasetRegistry.getDatasetSourceConfig()
 
-    val spark = SparkSession.builder()
+     val spark = SparkSession.builder()
       .appName("JDBC Connector Batch Job")
       .master(config.sparkMasterUrl)
       .getOrCreate()
 
+    val filteredDSSourceConfigList = dsSourceConfigList.map { configList =>
+      configList.filter(_.connectorType.equalsIgnoreCase("jdbc"))
+    }.getOrElse(List())
+
+    logger.info(s"Total no of datasets to be processed: ${filteredDSSourceConfigList.size}")
+
+    filteredDSSourceConfigList.map {
+        dataSourceConfig =>
+          processTask(config, kafkaClient, helper, spark, dataSourceConfig)
+    }
+
+    spark.stop()
+  }
+
+  private def processTask(config: JDBCConnectorConfig, kafkaClient: KafkaClient, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig) = {
+    logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")
+    val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
+    val delayMs = (60 * 1000) / dataSourceConfig.connectorConfig.jdbcBatchesPerMinute
+    var batch = 0
+    var eventCount = 0
     breakable {
       while (true) {
-        val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dsSourceConfig, dataset, batch)
+        val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dataSourceConfig, dataset, batch)
         batch += 1
         if (data.collect().length == 0) {
-          DatasetRegistry.updateConnectorAvgBatchReadTime(config.datasetId, batchReadTime/batch)
+          DatasetRegistry.updateConnectorAvgBatchReadTime(dataSourceConfig.datasetId, batchReadTime / batch)
           break
         } else {
-          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dsSourceConfig)
+          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dataSourceConfig)
           eventCount += data.collect().length
           // Sleep for the specified delay between batches
           Thread.sleep(delayMs)
         }
       }
     }
-
-    logger.info(s"Total number of records are pulled: $eventCount")
-    spark.stop()
+    logger.info(s"Completed processing dataset: ${dataSourceConfig.datasetId} :: Total number of records are pulled: $eventCount")
+    dataSourceConfig
   }
 }
 

@@ -1,7 +1,6 @@
 package org.sunbird.obsrv.helper
 
 import org.sunbird.obsrv.job.JDBCConnectorConfig
-import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.model.DatasetModels.DatasetSourceConfig
 import org.sunbird.obsrv.util.JSONUtil
 

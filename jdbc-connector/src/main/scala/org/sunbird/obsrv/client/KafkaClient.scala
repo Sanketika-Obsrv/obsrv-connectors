@@ -1,15 +1,16 @@
 package org.sunbird.obsrv.client
 
 import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerConfig, ProducerRecord}
-import org.apache.kafka.common.serialization.{LongSerializer, StringSerializer}
-import org.apache.log4j.{LogManager, Logger}
+import org.apache.kafka.common.serialization.StringSerializer
 import org.sunbird.obsrv.job.{JDBCConnectorConfig, JDBCConnectorJob}
-
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import java.util.Properties
 
-class KafkaClient(config: JDBCConnectorConfig) {
-  private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
-  private val producer = createProducer()
+class KafkaClient(config: JDBCConnectorConfig) extends Serializable {
+
+  @transient private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
+  @transient private val producer = createProducer()
   private def getProducer: Producer[Long, String] = producer
 
   @throws[Exception]

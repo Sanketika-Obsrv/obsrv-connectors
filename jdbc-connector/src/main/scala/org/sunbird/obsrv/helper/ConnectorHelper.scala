@@ -1,6 +1,6 @@
 package org.sunbird.obsrv.helper
 
-import org.apache.log4j.{LogManager, Logger}
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.job.JDBCConnectorConfig
@@ -13,7 +13,7 @@ import java.sql.Timestamp
 import scala.util.control.Breaks.break
 import scala.util.{Failure, Try}
 
-class ConnectorHelper(config: JDBCConnectorConfig) {
+class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
 
  private final val logger: Logger = LogManager.getLogger(getClass)
 
@@ -32,12 +32,14 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     while (retryCount < config.jdbcConnectionRetry && data == null) {
       val connectionResult = Try {
         val readStartTime = System.currentTimeMillis()
-        val result = spark.read.format("jdbc")
-          .option("url", jdbcUrl)
-          .option("user", connectorConfig.jdbcUser)
-          .option("password", connectorConfig.jdbcPassword)
-          .option("query", query)
-          .load()
+
+        val result =  spark.read.format("jdbc")
+            .option("driver", getDriver(connectorConfig.jdbcDatabaseType))
+            .option("url", jdbcUrl)
+            .option("user", connectorConfig.jdbcUser)
+            .option("password", connectorConfig.jdbcPassword)
+            .option("query", query)
+            .load()
         batchReadTime += System.currentTimeMillis() - readStartTime
         result
       }
@@ -64,7 +66,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.collect().length} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
-  def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
+  private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
     if (dataset.extractionConfig.get.isBatchEvent.get) {
       kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, records, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
     } else {
@@ -74,11 +76,18 @@ class ConnectorHelper(config: JDBCConnectorConfig) {
     }
   }
 
-  def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {
+  private def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {
     if (connectorStats.lastFetchTimestamp == null) {
       s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
     } else {
       s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} WHERE ${dataset.datasetConfig.tsKey} > '${connectorStats.lastFetchTimestamp}' ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
+    }
+  }
+
+  private def getDriver(databaseType: String): String = {
+     databaseType match {
+      case "postgresql" => config.postgresqlDriver
+      case "mysql" => config.mysqlDriver
     }
   }
 
