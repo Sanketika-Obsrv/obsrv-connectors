@@ -62,8 +62,8 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     val records = JSONUtil.parseRecords(data)
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
     pushToKafka(config, kafkaClient, dataset, records, dsSourceConfig)
-    DatasetRegistry.updateConnectorStats(dsSourceConfig.datasetId, lastRowTimestamp, data.collect().length)
-    logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.collect().length} :: Avg Batch Read Time: ${batchReadTime/batch}")
+    DatasetRegistry.updateConnectorStats(dsSourceConfig.datasetId, lastRowTimestamp, data.count())
+    logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.count()} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
   private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={

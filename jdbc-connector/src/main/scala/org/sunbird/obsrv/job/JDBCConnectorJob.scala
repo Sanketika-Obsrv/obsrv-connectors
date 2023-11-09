@@ -44,21 +44,18 @@ object JDBCConnectorJob extends Serializable {
   private def processTask(config: JDBCConnectorConfig, kafkaClient: KafkaClient, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig) = {
     logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")
     val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
-    val delayMs = (60 * 1000) / dataSourceConfig.connectorConfig.jdbcBatchesPerMinute
     var batch = 0
     var eventCount = 0
     breakable {
       while (true) {
         val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dataSourceConfig, dataset, batch)
         batch += 1
-        if (data.collect().length == 0) {
+        if (data.count == 0) {
           DatasetRegistry.updateConnectorAvgBatchReadTime(dataSourceConfig.datasetId, batchReadTime / batch)
           break
         } else {
           helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dataSourceConfig)
           eventCount += data.collect().length
-          // Sleep for the specified delay between batches
-          Thread.sleep(delayMs)
         }
       }
     }

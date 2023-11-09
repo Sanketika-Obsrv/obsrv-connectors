@@ -39,6 +39,7 @@ object EventGenerator {
     obsrvMeta.put("flags", Map())
     obsrvMeta.put("timespans", Map())
     obsrvMeta.put("error", Map())
+    obsrvMeta.put("processingStartTime", System.currentTimeMillis())
     obsrvMeta.put("source", Map(
       "meta" -> Map(
         "id" -> dsSourceConfig.id,
