@@ -9,7 +9,7 @@ import java.util.Properties
 
 class KafkaClient(config: JDBCConnectorConfig) extends Serializable {
 
-  @transient private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
+  @transient private final val logger: Logger = LogManager.getLogger(KafkaClient.getClass)
   @transient private val producer = createProducer()
   private def getProducer: Producer[Long, String] = producer
 
