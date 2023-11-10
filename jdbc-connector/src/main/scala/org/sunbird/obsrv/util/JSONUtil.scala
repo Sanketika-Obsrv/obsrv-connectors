@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonGenerator.Feature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.databind.{DeserializationFeature, SerializationFeature}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 object JSONUtil {
@@ -18,9 +19,12 @@ object JSONUtil {
 
   mapper.setSerializationInclusion(Include.NON_NULL)
 
-  def parseRecords(data: DataFrame): List[Map[String, Any]] = {
-    val jsonData = data.toJSON.collect().toList
-    jsonData.map { jsonString => deserialize(jsonString, classOf[Map[String, Any]]) }
+  def parseRecords(data: DataFrame): RDD[String] = {
+    data.rdd.map {
+      jsonString => {
+        jsonString.json
+      }
+    }
   }
 
   def serialize(obj: AnyRef): String = {

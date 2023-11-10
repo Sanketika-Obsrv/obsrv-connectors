@@ -16,7 +16,7 @@ object JDBCConnectorJob extends Serializable {
   private final val logger: Logger = LogManager.getLogger(JDBCConnectorJob.getClass)
 
   def main(args: Array[String]): Unit = {
-    val appConfig = ConfigFactory.load("application.conf").withFallback(ConfigFactory.systemEnvironment())
+    val appConfig = ConfigFactory.load("jdbc-connector.conf").withFallback(ConfigFactory.systemEnvironment())
     val config = new JDBCConnectorConfig(appConfig, args)
     val kafkaClient = new KafkaClient(config)
     val helper = new ConnectorHelper(config)

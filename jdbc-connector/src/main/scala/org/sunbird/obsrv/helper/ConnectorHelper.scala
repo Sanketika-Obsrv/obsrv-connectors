@@ -1,6 +1,7 @@
 package org.sunbird.obsrv.helper
 
 import org.apache.logging.log4j.{LogManager, Logger}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.job.JDBCConnectorConfig
@@ -66,9 +67,11 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.count()} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
-  private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig): Unit ={
+  private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: RDD[String], dsSourceConfig: DatasetSourceConfig): Unit ={
     if (dataset.extractionConfig.get.isBatchEvent.get) {
-      kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, records, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
+      records.foreach(record => {
+        kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
+      })
     } else {
       records.foreach(record => {
         kafkaClient.send(EventGenerator.getSingleEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config), config.ingestTopic)

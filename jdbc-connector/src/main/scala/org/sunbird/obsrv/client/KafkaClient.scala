@@ -1,26 +1,26 @@
 package org.sunbird.obsrv.client
 
-import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerConfig, ProducerRecord}
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.serialization.StringSerializer
-import org.sunbird.obsrv.job.{JDBCConnectorConfig, JDBCConnectorJob}
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
+import org.apache.logging.log4j.{LogManager, Logger}
+import org.sunbird.obsrv.job.JDBCConnectorConfig
+
 import java.util.Properties
 
 class KafkaClient(config: JDBCConnectorConfig) extends Serializable {
 
-  @transient private final val logger: Logger = LogManager.getLogger(KafkaClient.getClass)
-  @transient private val producer = createProducer()
-  private def getProducer: Producer[Long, String] = producer
+  @transient private val logger: Logger = LogManager.getLogger(classOf[KafkaClient])
 
   @throws[Exception]
   def send(event: String, topic: String): Unit = {
+    val producer = createProducer()
     try {
-      getProducer.send(new ProducerRecord[Long, String](topic, event))
+      producer.send(new ProducerRecord[Long, String](topic, event))
     } catch {
-      case  ex: Exception => {
-        logger.error("Error while sending data to kafka", ex)
-      }
+      case ex: Exception =>
+        logger.error("Error while sending data to kafka", ex.getMessage)
+    } finally {
+      producer.close()
     }
   }
 

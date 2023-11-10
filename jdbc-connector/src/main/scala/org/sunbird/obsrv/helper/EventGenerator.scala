@@ -1,5 +1,6 @@
 package org.sunbird.obsrv.helper
 
+import org.apache.spark.rdd.RDD
 import org.sunbird.obsrv.job.JDBCConnectorConfig
 import org.sunbird.obsrv.model.DatasetModels.DatasetSourceConfig
 import org.sunbird.obsrv.util.JSONUtil
@@ -11,11 +12,11 @@ case class SingleEvent(dataset: String, event: Map[String, Any], syncts: Long, o
 
 object EventGenerator {
 
-  def getBatchEvent(datasetId: String, records: List[Map[String, Any]], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig, extractionKey: String): String = {
+  def getBatchEvent(datasetId: String, record: String, dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig, extractionKey: String): String = {
     val event = Map(
       "id" -> UUID.randomUUID().toString,
       "dataset" -> datasetId,
-      extractionKey -> records,
+      extractionKey -> List(JSONUtil.deserialize(record, classOf[Map[String, Any]])),
       "syncts" -> System.currentTimeMillis(),
       "obsrv_meta" -> getObsrvMeta(dsSourceConfig, config)
     )
@@ -23,10 +24,10 @@ object EventGenerator {
   }
 
 
-  def getSingleEvent(datasetId: String, record: Map[String, Any], dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): String = {
+  def getSingleEvent(datasetId: String, record: String, dsSourceConfig: DatasetSourceConfig, config: JDBCConnectorConfig): String = {
     val event = SingleEvent(
       datasetId,
-      record,
+      JSONUtil.deserialize(record, classOf[Map[String, Any]]),
       System.currentTimeMillis(),
       getObsrvMeta(dsSourceConfig, config)
     )
