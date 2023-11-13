@@ -2,7 +2,6 @@ package org.sunbird.obsrv.job
 
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.helper.ConnectorHelper
 import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.registry.DatasetRegistry
@@ -18,7 +17,6 @@ object JDBCConnectorJob extends Serializable {
   def main(args: Array[String]): Unit = {
     val appConfig = ConfigFactory.load("jdbc-connector.conf").withFallback(ConfigFactory.systemEnvironment())
     val config = new JDBCConnectorConfig(appConfig, args)
-    val kafkaClient = new KafkaClient(config)
     val helper = new ConnectorHelper(config)
     val dsSourceConfigList =  DatasetRegistry.getDatasetSourceConfig()
 
@@ -36,13 +34,13 @@ object JDBCConnectorJob extends Serializable {
 
     filteredDSSourceConfigList.map {
         dataSourceConfig =>
-          processTask(config, kafkaClient, helper, spark, dataSourceConfig)
+          processTask(config, helper, spark, dataSourceConfig)
     }
 
     spark.stop()
   }
 
-  private def processTask(config: JDBCConnectorConfig, kafkaClient: KafkaClient, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig) = {
+  private def processTask(config: JDBCConnectorConfig, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig) = {
     logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")
     val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
     var batch: Int = 0
@@ -57,7 +55,7 @@ object JDBCConnectorJob extends Serializable {
           logger.info("Updating the metrics to the database...")
           break
         } else {
-          helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dataSourceConfig)
+          helper.processRecords(config, dataset, batch, data, batchReadTime, dataSourceConfig)
           eventCount += data.count()
         }
       }

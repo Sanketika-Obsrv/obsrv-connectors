@@ -1,17 +1,16 @@
 package org.sunbird.obsrv.helper
 
 import org.apache.logging.log4j.{LogManager, Logger}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.sunbird.obsrv.client.KafkaClient
 import org.sunbird.obsrv.job.JDBCConnectorConfig
 import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.model.DatasetModels.{ConnectorConfig, ConnectorStats, Dataset, DatasetSourceConfig}
 import org.sunbird.obsrv.registry.DatasetRegistry
-import org.sunbird.obsrv.util.JSONUtil.serialize
 import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
 
 import java.sql.Timestamp
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 import scala.util.control.Breaks.break
 import scala.util.{Failure, Try}
 
@@ -63,24 +62,67 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     (data, batchReadTime)
   }
 
-  def processRecords(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, batchReadTime: Long, dsSourceConfig: DatasetSourceConfig): Unit = {
-    val records = JSONUtil.parseRecords(data)
+  def processRecords(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, batchReadTime: Long, dsSourceConfig: DatasetSourceConfig): Unit = {
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
-    pushToKafka(config, kafkaClient, dataset, records, dsSourceConfig)
+    pushToKafka(config, dataset, dsSourceConfig, data)
     DatasetRegistry.updateConnectorStats(dsSourceConfig.datasetId, lastRowTimestamp, data.count())
     logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.count()} :: Avg Batch Read Time: ${batchReadTime/batch}")
   }
 
-  private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: RDD[String], dsSourceConfig: DatasetSourceConfig): Unit ={
+  private def pushToKafka(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, dsSourceConfig: DatasetSourceConfig, df: DataFrame): Unit = {
+    val transformedDF: DataFrame = transformDF(df, dsSourceConfig, dataset)
+    transformedDF.selectExpr("to_json(struct(*)) AS value")
+      .write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", config.kafkaServerUrl)
+      .option("topic", dataset.datasetConfig.entryTopic)
+      .save()
+  }
+
+  private def transformDF(df: DataFrame, dsSourceConfig: DatasetSourceConfig, dataset: DatasetModels.Dataset): DataFrame = {
+    val fieldNames = df.columns
+    val structExpr = struct(fieldNames.map(col): _*)
+
+    val obsrvMetaSchema = StructType(
+      Array(
+        StructField("timespans", MapType(StringType, StringType), nullable = true),
+        StructField("error", MapType(StringType, StringType), nullable = true),
+        StructField("source", StructType(
+          Array(
+            StructField("meta", StructType(
+              Array(
+                StructField("id", StringType),
+                StructField("connector_type", StringType),
+                StructField("version", StringType),
+                StructField("entry_source", StringType)
+              )
+            )),
+            StructField("trace_id", StringType)
+          )
+        )),
+        StructField("processingStartTime", LongType),
+        StructField("syncts", LongType),
+        StructField("flags", MapType(StringType, StringType), nullable = true)
+      )
+    )
+
+    val getObsrvMeta = udf(() => JSONUtil.serialize(EventGenerator.getObsrvMeta(dsSourceConfig, config)))
+    var resultDF: DataFrame = null
+
     if (dataset.extractionConfig.get.isBatchEvent.get) {
-      records.foreach(record => {
-        kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), dataset.datasetConfig.entryTopic)
-      })
+      resultDF = df.withColumn(dataset.extractionConfig.get.extractionKey.get, expr(s"transform(array($structExpr), x -> map(${df.columns.map(c => s"'$c', x.$c").mkString(", ")}))"))
     } else {
-      records.foreach(record => {
-        kafkaClient.send(EventGenerator.getSingleEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config), dataset.datasetConfig.entryTopic)
-      })
+      resultDF = df.withColumn("event", structExpr)
     }
+
+    resultDF = resultDF
+      .withColumn("dataset", lit(dsSourceConfig.datasetId))
+      .withColumn("syncts", expr("cast(current_timestamp() as long)"))
+      .withColumn("obsrv_meta_str", getObsrvMeta())
+      .withColumn("obsrv_meta", from_json(col("obsrv_meta_str"), obsrvMetaSchema))
+
+    val columnsToRemove = fieldNames.toSeq :+ "obsrv_meta_str"
+    resultDF.drop(columnsToRemove: _*)
   }
 
   private def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {
