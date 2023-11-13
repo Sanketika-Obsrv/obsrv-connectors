@@ -8,9 +8,10 @@ class JDBCConnectorConfig (config: Config, args: Array[String]) extends Serializ
   val sparkMasterUrl: String = config.getString("spark.master")
   val jdbcConnectionRetry: Int = config.getInt("jdbc.connection.retry")
   val jdbcConnectionRetryDelay: Int = config.getInt("jdbc.connection.retryDelay")
-  val ingestTopic: String = config.getString("kafka.topic.ingest")
   val connectorVersion: String = config.getString("connector.version")
   val postgresqlDriver: String = config.getString("drivers.postgresql")
   val mysqlDriver: String = config.getString("drivers.mysql")
+  val cipherSecret: String = config.getString("cipher.secret")
+  val eventMaxLimit: Long = config.getLong("event.max.limit")
 
 }

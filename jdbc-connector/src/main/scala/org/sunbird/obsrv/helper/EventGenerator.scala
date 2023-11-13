@@ -1,6 +1,5 @@
 package org.sunbird.obsrv.helper
 
-import org.apache.spark.rdd.RDD
 import org.sunbird.obsrv.job.JDBCConnectorConfig
 import org.sunbird.obsrv.model.DatasetModels.DatasetSourceConfig
 import org.sunbird.obsrv.util.JSONUtil
@@ -46,7 +45,7 @@ object EventGenerator {
         "id" -> dsSourceConfig.id,
         "connector_type" -> "jdbc",
         "version" -> config.connectorVersion,
-        "entry_source" -> dsSourceConfig.connectorConfig.jdbcDatabaseTable
+        "entry_source" -> dsSourceConfig.connectorConfig.tableName
       ),
       "trace_id" -> UUID.randomUUID().toString
     ))

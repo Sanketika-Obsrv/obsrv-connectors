@@ -8,7 +8,8 @@ import org.sunbird.obsrv.job.JDBCConnectorConfig
 import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.model.DatasetModels.{ConnectorConfig, ConnectorStats, Dataset, DatasetSourceConfig}
 import org.sunbird.obsrv.registry.DatasetRegistry
-import org.sunbird.obsrv.util.JSONUtil
+import org.sunbird.obsrv.util.JSONUtil.serialize
+import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
 
 import java.sql.Timestamp
 import scala.util.control.Breaks.break
@@ -19,10 +20,11 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
  private final val logger: Logger = LogManager.getLogger(getClass)
 
   def pullRecords(spark: SparkSession, dsSourceConfig: DatasetSourceConfig, dataset: Dataset, batch: Int): (DataFrame, Long) = {
+    val cipherUtil = new CipherUtil(config)
     val connectorConfig = dsSourceConfig.connectorConfig
     val connectorStats = dsSourceConfig.connectorStats
-    val jdbcUrl = s"jdbc:${connectorConfig.jdbcDatabaseType}://${connectorConfig.jdbcHost}:${connectorConfig.jdbcPort}/${connectorConfig.jdbcDatabase}"
-    val offset = batch * connectorConfig.jdbcBatchSize
+    val jdbcUrl = s"jdbc:${connectorConfig.databaseType}://${connectorConfig.connection.host}:${connectorConfig.connection.port}/${connectorConfig.databaseName}"
+    val offset = batch * connectorConfig.batchSize
     val query: String = getQuery(connectorStats, connectorConfig, dataset, offset)
     var data: DataFrame = null
     var batchReadTime: Long = 0
@@ -33,14 +35,16 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     while (retryCount < config.jdbcConnectionRetry && data == null) {
       val connectionResult = Try {
         val readStartTime = System.currentTimeMillis()
+        val authenticationData: Map[String, String] =  JSONUtil.deserialize(cipherUtil.decrypt(connectorConfig.authenticationMechanism.encryptedValues), classOf[Map[String, String]])
 
         val result =  spark.read.format("jdbc")
-            .option("driver", getDriver(connectorConfig.jdbcDatabaseType))
+            .option("driver", getDriver(connectorConfig.databaseType))
             .option("url", jdbcUrl)
-            .option("user", connectorConfig.jdbcUser)
-            .option("password", connectorConfig.jdbcPassword)
+            .option("user", authenticationData("username"))
+            .option("password", authenticationData("password"))
             .option("query", query)
             .load()
+
         batchReadTime += System.currentTimeMillis() - readStartTime
         result
       }
@@ -70,20 +74,20 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
   private def pushToKafka(config: JDBCConnectorConfig, kafkaClient: KafkaClient, dataset: DatasetModels.Dataset, records: RDD[String], dsSourceConfig: DatasetSourceConfig): Unit ={
     if (dataset.extractionConfig.get.isBatchEvent.get) {
       records.foreach(record => {
-        kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), config.ingestTopic)
+        kafkaClient.send(EventGenerator.getBatchEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config, dataset.extractionConfig.get.extractionKey.get), dataset.datasetConfig.entryTopic)
       })
     } else {
       records.foreach(record => {
-        kafkaClient.send(EventGenerator.getSingleEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config), config.ingestTopic)
+        kafkaClient.send(EventGenerator.getSingleEvent(dsSourceConfig.datasetId, record, dsSourceConfig, config), dataset.datasetConfig.entryTopic)
       })
     }
   }
 
   private def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {
     if (connectorStats.lastFetchTimestamp == null) {
-      s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
+      s"SELECT * FROM ${connectorConfig.tableName} ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.batchSize} OFFSET $offset"
     } else {
-      s"SELECT * FROM ${connectorConfig.jdbcDatabaseTable} WHERE ${dataset.datasetConfig.tsKey} > '${connectorStats.lastFetchTimestamp}' ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.jdbcBatchSize} OFFSET $offset"
+      s"SELECT * FROM ${connectorConfig.tableName} WHERE ${dataset.datasetConfig.tsKey} >= '${connectorStats.lastFetchTimestamp}' ORDER BY ${dataset.datasetConfig.tsKey} LIMIT ${connectorConfig.batchSize} OFFSET $offset"
     }
   }
 

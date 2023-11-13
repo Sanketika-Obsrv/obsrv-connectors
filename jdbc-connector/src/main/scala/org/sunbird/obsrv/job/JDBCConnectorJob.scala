@@ -28,10 +28,11 @@ object JDBCConnectorJob extends Serializable {
       .getOrCreate()
 
     val filteredDSSourceConfigList = dsSourceConfigList.map { configList =>
-      configList.filter(_.connectorType.equalsIgnoreCase("jdbc"))
+      configList.filter(config => config.connectorType.equalsIgnoreCase("jdbc") && config.status.equalsIgnoreCase("active"))
     }.getOrElse(List())
 
     logger.info(s"Total no of datasets to be processed: ${filteredDSSourceConfigList.size}")
+
 
     filteredDSSourceConfigList.map {
         dataSourceConfig =>
@@ -44,23 +45,34 @@ object JDBCConnectorJob extends Serializable {
   private def processTask(config: JDBCConnectorConfig, kafkaClient: KafkaClient, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig) = {
     logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")
     val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
-    var batch = 0
-    var eventCount = 0
+    var batch: Int = 0
+    var eventCount: Long = 0
     breakable {
       while (true) {
         val (data: DataFrame, batchReadTime: Long) = helper.pullRecords(spark, dataSourceConfig, dataset, batch)
         batch += 1
-        if (data.count == 0) {
+
+        if (data.count == 0 || validateMaxSize(eventCount, config.eventMaxLimit)) {
           DatasetRegistry.updateConnectorAvgBatchReadTime(dataSourceConfig.datasetId, batchReadTime / batch)
+          logger.info("Updating the metrics to the database...")
           break
         } else {
           helper.processRecords(config, kafkaClient, dataset, batch, data, batchReadTime, dataSourceConfig)
-          eventCount += data.collect().length
+          eventCount += data.count()
         }
       }
     }
     logger.info(s"Completed processing dataset: ${dataSourceConfig.datasetId} :: Total number of records are pulled: $eventCount")
     dataSourceConfig
+  }
+
+  private def validateMaxSize(eventCount: Long, maxLimit: Long): Boolean = {
+     if (maxLimit == -1) {
+       false
+     } else if (eventCount > maxLimit) {
+       logger.info(s"Max fetch limit is reached, stopped fetching :: event count: ${eventCount} :: max limit: ${maxLimit}")
+       true
+     } else false
   }
 }
 
