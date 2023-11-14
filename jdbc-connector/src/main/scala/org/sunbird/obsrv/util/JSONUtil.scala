@@ -19,14 +19,6 @@ object JSONUtil {
 
   mapper.setSerializationInclusion(Include.NON_NULL)
 
-  def parseRecords(data: DataFrame): RDD[String] = {
-    data.rdd.map {
-      jsonString => {
-        jsonString.json
-      }
-    }
-  }
-
   def serialize(obj: AnyRef): String = {
     mapper.writeValueAsString(obj)
   }
