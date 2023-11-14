@@ -5,8 +5,6 @@ import com.fasterxml.jackson.core.JsonGenerator.Feature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.databind.{DeserializationFeature, SerializationFeature}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
 
 object JSONUtil {
 
