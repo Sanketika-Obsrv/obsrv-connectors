@@ -1,12 +1,11 @@
 package org.sunbird.obsrv.job
 
 import com.typesafe.config.ConfigFactory
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.helper.ConnectorHelper
 import org.sunbird.obsrv.model.DatasetModels
 import org.sunbird.obsrv.registry.DatasetRegistry
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 
 import scala.util.control.Breaks.{break, breakable}
 
@@ -19,18 +18,15 @@ object JDBCConnectorJob extends Serializable {
     val config = new JDBCConnectorConfig(appConfig, args)
     val helper = new ConnectorHelper(config)
     val dsSourceConfigList =  DatasetRegistry.getDatasetSourceConfig()
+    val datasetList = DatasetRegistry.getAllDatasets()
 
      val spark = SparkSession.builder()
       .appName("JDBC Connector Batch Job")
       .master(config.sparkMasterUrl)
       .getOrCreate()
 
-    val filteredDSSourceConfigList = dsSourceConfigList.map { configList =>
-      configList.filter(config => config.connectorType.equalsIgnoreCase("jdbc") && config.status.equalsIgnoreCase("active"))
-    }.getOrElse(List())
-
+    val filteredDSSourceConfigList = getActiveDataSetsSourceConfig(dsSourceConfigList, datasetList)
     logger.info(s"Total no of datasets to be processed: ${filteredDSSourceConfigList.size}")
-
 
     filteredDSSourceConfigList.map {
         dataSourceConfig =>
@@ -62,6 +58,15 @@ object JDBCConnectorJob extends Serializable {
     }
     logger.info(s"Completed processing dataset: ${dataSourceConfig.datasetId} :: Total number of records are pulled: $eventCount")
     dataSourceConfig
+  }
+
+  private def getActiveDataSetsSourceConfig(dsSourceConfigList: Option[List[DatasetModels.DatasetSourceConfig]], datasetList: Map[String, DatasetModels.Dataset]) = {
+    val activeDatasets = datasetList.filter(dataset => dataset._2.status.equalsIgnoreCase("active"))
+    val filteredDSSourceConfigList = dsSourceConfigList.map { configList =>
+      configList.filter(config => config.connectorType.equalsIgnoreCase("jdbc") &&
+        config.status.equalsIgnoreCase("active") && activeDatasets.contains(config.datasetId))
+    }.get
+    filteredDSSourceConfigList
   }
 
   private def validateMaxSize(eventCount: Long, maxLimit: Long): Boolean = {
