@@ -1,7 +1,8 @@
 package org.sunbird.obsrv.helper
 
 import org.sunbird.obsrv.job.JDBCConnectorConfig
-import org.sunbird.obsrv.model.DatasetModels.DatasetSourceConfig
+import org.sunbird.obsrv.model.DatasetModels.{Dataset, DatasetSourceConfig}
+import org.sunbird.obsrv.model.{Edata, MetricLabel}
 import org.sunbird.obsrv.util.JSONUtil
 
 import java.util.UUID
@@ -50,6 +51,64 @@ object EventGenerator {
       "trace_id" -> UUID.randomUUID().toString
     ))
     obsrvMeta
+  }
+
+  def generateProcessingMetric(config: JDBCConnectorConfig, dataset: Dataset, batch: Int, eventCount: Long, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper, eventProcessingTime: Long): Unit = {
+    metrics.generate(
+      dataset.id,
+      edata = Edata(
+        metric = Map(
+          metrics.getMetricName("batch_count") -> batch,
+          metrics.getMetricName("processed_event_count") -> eventCount,
+          metrics.getMetricName("processing_time_in_ms") -> eventProcessingTime
+        ),
+        labels = List(
+          MetricLabel("job", config.jobName),
+          MetricLabel("databaseType", dsSourceConfig.connectorConfig.databaseType),
+          MetricLabel("databaseName", dsSourceConfig.connectorConfig.databaseName),
+          MetricLabel("tableName", dsSourceConfig.connectorConfig.tableName),
+          MetricLabel("batchSize", String.valueOf(dsSourceConfig.connectorConfig.batchSize))
+        )
+      )
+    )
+  }
+
+  def generateFetchMetric(config: JDBCConnectorConfig, dataset: Dataset, batch: Int, eventCount: Long, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper, eventProcessingTime: Long): Unit = {
+    metrics.generate(
+      dataset.id,
+      edata = Edata(
+        metric = Map(
+          metrics.getMetricName("batch_count") -> batch,
+          metrics.getMetricName("fetched_event_count") -> eventCount,
+          metrics.getMetricName("fetched_time_in_ms") -> eventProcessingTime
+        ),
+        labels = List(
+          MetricLabel("job", config.jobName),
+          MetricLabel("databaseType", dsSourceConfig.connectorConfig.databaseType),
+          MetricLabel("databaseName", dsSourceConfig.connectorConfig.databaseName),
+          MetricLabel("tableName", dsSourceConfig.connectorConfig.tableName),
+          MetricLabel("batchSize", String.valueOf(dsSourceConfig.connectorConfig.batchSize))
+        )
+      )
+    )
+  }
+
+  def generateErrorMetric(config: JDBCConnectorConfig, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper, eventProcessingTime: Long, error: String, errorMessage: String): Unit = {
+    metrics.generate(
+      dsSourceConfig.datasetId,
+      edata = Edata(
+        metric = Map(),
+        labels = List(
+          MetricLabel("job", config.jobName),
+          MetricLabel("databaseType", dsSourceConfig.connectorConfig.databaseType),
+          MetricLabel("databaseName", dsSourceConfig.connectorConfig.databaseName),
+          MetricLabel("tableName", dsSourceConfig.connectorConfig.tableName),
+          MetricLabel("batchSize", String.valueOf(dsSourceConfig.connectorConfig.batchSize))
+        ),
+        err = error,
+        errMsg = errorMessage
+      )
+    )
   }
 
 }

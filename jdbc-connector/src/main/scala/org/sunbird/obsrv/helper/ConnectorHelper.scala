@@ -1,6 +1,8 @@
 package org.sunbird.obsrv.helper
 
 import org.apache.logging.log4j.{LogManager, Logger}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.sunbird.obsrv.job.JDBCConnectorConfig
 import org.sunbird.obsrv.model.DatasetModels
@@ -9,8 +11,6 @@ import org.sunbird.obsrv.registry.DatasetRegistry
 import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
 
 import java.sql.Timestamp
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 import scala.util.control.Breaks.break
 import scala.util.{Failure, Try}
 
@@ -18,7 +18,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
 
  private final val logger: Logger = LogManager.getLogger(getClass)
 
-  def pullRecords(spark: SparkSession, dsSourceConfig: DatasetSourceConfig, dataset: Dataset, batch: Int): (DataFrame, Long) = {
+  def pullRecords(spark: SparkSession, dsSourceConfig: DatasetSourceConfig, dataset: Dataset, batch: Int, metrics: MetricsHelper): DataFrame = {
     val cipherUtil = new CipherUtil(config)
     val connectorConfig = dsSourceConfig.connectorConfig
     val connectorStats = dsSourceConfig.connectorStats
@@ -35,7 +35,6 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
       val connectionResult = Try {
         val readStartTime = System.currentTimeMillis()
         val authenticationData: Map[String, String] =  JSONUtil.deserialize(cipherUtil.decrypt(connectorConfig.authenticationMechanism.encryptedValues), classOf[Map[String, String]])
-
         val result =  spark.read.format("jdbc")
             .option("driver", getDriver(connectorConfig.databaseType))
             .option("url", jdbcUrl)
@@ -44,7 +43,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
             .option("query", query)
             .load()
 
-        batchReadTime += System.currentTimeMillis() - readStartTime
+        batchReadTime = System.currentTimeMillis() - readStartTime
         result
       }
 
@@ -56,17 +55,22 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
           if (retryCount == config.jdbcConnectionRetry) break
           Thread.sleep(config.jdbcConnectionRetryDelay)
         case util.Success(df) =>
+          EventGenerator.generateFetchMetric(config, dataset, batch, df.count(), dsSourceConfig, metrics, batchReadTime)
           data = df
       }
     }
-    (data, batchReadTime)
+    data
   }
 
-  def processRecords(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, batchReadTime: Long, dsSourceConfig: DatasetSourceConfig): Unit = {
+  def processRecords(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper): Unit = {
+    val processStartTime = System.currentTimeMillis()
     val lastRowTimestamp = data.orderBy(data(dataset.datasetConfig.tsKey).desc).first().getAs[Timestamp](dataset.datasetConfig.tsKey)
+    val eventCount = data.count()
     pushToKafka(config, dataset, dsSourceConfig, data)
+    val eventProcessingTime = System.currentTimeMillis() - processStartTime
     DatasetRegistry.updateConnectorStats(dsSourceConfig.datasetId, lastRowTimestamp, data.count())
-    logger.info(s"Batch $batch is processed successfully :: Number of records pulled: ${data.count()} :: Avg Batch Read Time: ${batchReadTime/batch}")
+    EventGenerator.generateProcessingMetric(config, dataset, batch, eventCount, dsSourceConfig, metrics, eventProcessingTime)
+    logger.info(s"Batch $batch is processed successfully :: Number of records pulled: $eventCount")
   }
 
   private def pushToKafka(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, dsSourceConfig: DatasetSourceConfig, df: DataFrame): Unit = {

@@ -13,5 +13,8 @@ class JDBCConnectorConfig (config: Config, args: Array[String]) extends Serializ
   val mysqlDriver: String = config.getString("drivers.mysql")
   val cipherSecret: String = config.getString("cipher.secret")
   val eventMaxLimit: Long = config.getLong("event.max.limit")
+  val env: String = config.getString("env")
+  val metricsTopic: String = config.getString("kafka.metrics.topic")
+  val jobName: String = "JDBCConnectorJob"
 
 }
