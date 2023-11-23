@@ -37,6 +37,7 @@ object JDBCConnectorJob extends Serializable {
     spark.stop()
   }
 
+
   private def processTask(config: JDBCConnectorConfig, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig, metrics: MetricsHelper) = {
     try {
       logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")

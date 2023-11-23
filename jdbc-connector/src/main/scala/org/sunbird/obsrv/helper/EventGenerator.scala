@@ -53,6 +53,7 @@ object EventGenerator {
     obsrvMeta
   }
 
+
   def generateProcessingMetric(config: JDBCConnectorConfig, dataset: Dataset, batch: Int, eventCount: Long, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper, eventProcessingTime: Long): Unit = {
     metrics.generate(
       dataset.id,
