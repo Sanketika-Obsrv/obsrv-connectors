@@ -56,12 +56,12 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     data
   }
 
-  private def exceptionHandler(dsSourceConfig: DatasetSourceConfig, retryCount: Int, exception: Throwable, metrics: MetricsHelper, batch: Int): Unit = {
-    val error = getExceptionMessage(exception)
-    logger.error(s"$error :: Retrying (${retryCount}/${config.jdbcConnectionRetry} :: Exception: ${exception.getMessage}")
-    exception.printStackTrace()
+  private def exceptionHandler(dsSourceConfig: DatasetSourceConfig, retryCount: Int, ex: Throwable, metrics: MetricsHelper, batch: Int): Unit = {
+    val error = getExceptionMessage(ex)
+    logger.error(s"$error :: Retrying (${retryCount}/${config.jdbcConnectionRetry} :: Exception: ${ex.getMessage}")
+    ex.printStackTrace()
     DatasetRegistry.updateConnectorDisconnections(dsSourceConfig.datasetId, retryCount)
-    EventGenerator.generateErrorMetric(config, dsSourceConfig, metrics, retryCount, batch, error, exception.getMessage)
+    EventGenerator.generateErrorMetric(config, dsSourceConfig, metrics, retryCount, batch, error, ex.getMessage)
     if (retryCount == config.jdbcConnectionRetry) break
     Thread.sleep(config.jdbcConnectionRetryDelay)
   }
