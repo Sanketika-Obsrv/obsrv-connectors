@@ -39,9 +39,9 @@ object JDBCConnectorJob extends Serializable {
 
 
   private def processTask(config: JDBCConnectorConfig, helper: ConnectorHelper, spark: SparkSession, dataSourceConfig: DatasetModels.DatasetSourceConfig, metrics: MetricsHelper) = {
+    val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
     try {
       logger.info(s"Started processing dataset: ${dataSourceConfig.datasetId}")
-      val dataset = DatasetRegistry.getDataset(dataSourceConfig.datasetId).get
       var batch: Int = 0
       var eventCount: Long = 0
       breakable {
@@ -60,7 +60,7 @@ object JDBCConnectorJob extends Serializable {
       dataSourceConfig
     } catch {
       case exception: Exception =>
-        EventGenerator.generateErrorMetric(config, dataSourceConfig, metrics, "Error while processing the JDBC Connector Job", exception.getMessage)
+        EventGenerator.generateErrorMetric(config, dataSourceConfig, metrics, "Error while processing the JDBC Connector Job", exception.getMessage, dataset.dataVersion)
     }
   }
 

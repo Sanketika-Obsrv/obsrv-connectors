@@ -5,12 +5,12 @@ import org.sunbird.obsrv.model.{Actor, Context, Edata, JobMetric, MetricObject, 
 
 case class MetricsHelper(config: JDBCConnectorConfig) extends BaseMetricHelper(config) {
 
-  private def getObject(datasetId: String) = {
-    MetricObject(id = datasetId, `type` = "Dataset", ver = "1.0.0")
+  private def getObject(datasetId: String, dsVersion: Int) = {
+    MetricObject(id = datasetId, `type` = "Dataset", ver = dsVersion)
   }
 
-  def generate(datasetId: String, edata: Edata) = {
-    val `object` = getObject(datasetId)
+  def generate(datasetId: String, dsVersion: Int, edata: Edata) = {
+    val `object` = getObject(datasetId, dsVersion)
     val actor = Actor(id = config.jobName, `type` = "SYSTEM")
     val pdata = Pdata(id = "Connectors", pid = config.jobName, ver = config.connectorVersion)
     val context = Context(env = config.env, pdata = pdata)

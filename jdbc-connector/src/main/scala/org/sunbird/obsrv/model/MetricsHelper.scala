@@ -7,7 +7,7 @@ trait IMetricsHelper {
   val metrics: Map[String, String]
   def sync(metric: IJobMetric): Unit
 
-  def generate(datasetId: String, edata: Edata): Unit
+  def generate(datasetId: String, dsVersion: Int, edata: Edata): Unit
   def getMetricName(name: String) = {
     metrics.get(name).getOrElse("")
   }
