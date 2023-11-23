@@ -12,7 +12,7 @@ case class MetricsHelper(config: JDBCConnectorConfig) extends BaseMetricHelper(c
   def generate(datasetId: String, edata: Edata) = {
     val `object` = getObject(datasetId)
     val actor = Actor(id = config.jobName, `type` = "SYSTEM")
-    val pdata = Pdata(id = "Connectors", pid = config.jobName, ver = "1.0.0")
+    val pdata = Pdata(id = "Connectors", pid = config.jobName, ver = config.connectorVersion)
     val context = Context(env = config.env, pdata = pdata)
     val metric = JobMetric(actor = actor, context = context, `object` = `object`, edata = edata)
     this.sync(metric)

@@ -1,7 +1,7 @@
 package org.sunbird.obsrv.helper
 
+import org.apache.kafka.common.KafkaException
 import org.apache.logging.log4j.{LogManager, Logger}
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -13,11 +13,7 @@ import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
 
 import java.net.UnknownHostException
 import java.sql.Timestamp
-import java.sql.Timestamp
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 import scala.util.control.Breaks.break
-import scala.util.{Failure, Try}
 
 class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
 
@@ -97,36 +93,46 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
   }
 
   private def pushToKafka(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, dsSourceConfig: DatasetSourceConfig, df: DataFrame): Unit = {
-    val transformedDF: DataFrame = transformDF(df, dsSourceConfig, dataset)
-    transformedDF
-      .selectExpr("to_json(struct(*)) AS value")
-      .write
-      .format("kafka")
-      .option("kafka.bootstrap.servers", config.kafkaServerUrl)
-      .option("topic", dataset.datasetConfig.entryTopic)
-      .save()
+    try {
+      val transformedDF: DataFrame = transformDF(df, dsSourceConfig, dataset)
+      transformedDF
+        .selectExpr("to_json(struct(*)) AS value")
+        .write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", config.kafkaServerUrl)
+        .option("topic", dataset.datasetConfig.entryTopic)
+        .save()
+    } catch {
+      case ex: KafkaException =>
+        throw new Exception(s"Error while sending data to kafka: ${ex.getMessage}")
+    }
   }
 
   private def transformDF(df: DataFrame, dsSourceConfig: DatasetSourceConfig, dataset: DatasetModels.Dataset): DataFrame = {
-    val fieldNames = df.columns
-    val structExpr = struct(fieldNames.map(col): _*)
-    val getObsrvMeta = udf(() => JSONUtil.serialize(EventGenerator.getObsrvMeta(dsSourceConfig, config)))
-    var resultDF: DataFrame = null
+    try {
+      val fieldNames = df.columns
+      val structExpr = struct(fieldNames.map(col): _*)
+      val getObsrvMeta = udf(() => JSONUtil.serialize(EventGenerator.getObsrvMeta(dsSourceConfig, config)))
+      var resultDF: DataFrame = null
 
-    if (dataset.extractionConfig.get.isBatchEvent.get) {
-      resultDF = df.withColumn(dataset.extractionConfig.get.extractionKey.get, expr(s"transform(array($structExpr), x -> map(${df.columns.map(c => s"'$c', x.$c").mkString(", ")}))"))
-    } else {
-      resultDF = df.withColumn("event", structExpr)
+      if (dataset.extractionConfig.get.isBatchEvent.get) {
+        resultDF = df.withColumn(dataset.extractionConfig.get.extractionKey.get, expr(s"transform(array($structExpr), x -> map(${df.columns.map(c => s"'$c', x.$c").mkString(", ")}))"))
+      } else {
+        resultDF = df.withColumn("event", structExpr)
+      }
+
+      resultDF = resultDF
+        .withColumn("dataset", lit(dsSourceConfig.datasetId))
+        .withColumn("syncts", expr("cast(current_timestamp() as long)"))
+        .withColumn("obsrv_meta_str", getObsrvMeta())
+        .withColumn("obsrv_meta", from_json(col("obsrv_meta_str"), getObsrvMetaSchema))
+
+      val columnsToRemove = fieldNames.toSeq :+ "obsrv_meta_str"
+      resultDF.drop(columnsToRemove: _*)
+    } catch {
+      case ex: Exception =>
+        throw new Exception(s"Error while transforming the data: ${ex.getMessage}")
     }
-
-    resultDF = resultDF
-      .withColumn("dataset", lit(dsSourceConfig.datasetId))
-      .withColumn("syncts", expr("cast(current_timestamp() as long)"))
-      .withColumn("obsrv_meta_str", getObsrvMeta())
-      .withColumn("obsrv_meta", from_json(col("obsrv_meta_str"), getObsrvMetaSchema))
-
-    val columnsToRemove = fieldNames.toSeq :+ "obsrv_meta_str"
-    resultDF.drop(columnsToRemove: _*)
   }
 
   private def getQuery(connectorStats: ConnectorStats, connectorConfig: ConnectorConfig, dataset: Dataset, offset: Int): String = {

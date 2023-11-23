@@ -1,6 +1,5 @@
 package org.sunbird.obsrv.helper
 
-import com.typesafe.config.Config
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.logging.log4j.{LogManager, Logger}
 import org.sunbird.obsrv.job.JDBCConnectorConfig
@@ -27,8 +26,8 @@ case class KafkaMessageProducer(config: JDBCConnectorConfig) {
       producer.send(record)
     } catch {
       case ex: Exception =>
-        logger.error("Error sending message to Kafka: ", ex.getMessage)
-        ex.printStackTrace()
+        logger.error("Error while sending metrics data to Kafka: ", ex.getMessage)
+        throw new Exception(s"Error while sending metrics data to Kafka: ${ex.getMessage}")
     }
   }
 }
