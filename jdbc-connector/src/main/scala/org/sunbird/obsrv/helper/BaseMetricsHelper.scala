@@ -8,10 +8,11 @@ abstract class BaseMetricHelper(config: JDBCConnectorConfig) extends IMetricsHel
 
   override val metrics: Map[String, String] = Map(
     "batch_count" -> "batch_count",
-    "processed_event_count" -> "processed_event_count",
-    "processing_time_in_ms" -> "processing_time_in_ms",
+    "failure_count" -> "failure_count",
     "fetched_event_count" -> "fetched_event_count",
-    "fetched_time_in_ms" -> "fetched_time_in_ms"
+    "fetched_time_in_ms" -> "fetched_time_in_ms",
+    "processed_event_count" -> "processed_event_count",
+    "processing_time_in_ms" -> "processing_time_in_ms"
   )
 
   val metricsProducer = KafkaMessageProducer(config)

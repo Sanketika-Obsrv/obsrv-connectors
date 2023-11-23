@@ -10,6 +10,7 @@ import org.sunbird.obsrv.model.DatasetModels.{ConnectorConfig, ConnectorStats, D
 import org.sunbird.obsrv.registry.DatasetRegistry
 import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
 
+import java.net.UnknownHostException
 import java.sql.Timestamp
 import scala.util.control.Breaks.break
 import scala.util.{Failure, Try}
@@ -32,7 +33,7 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
     logger.info(s"Started pulling batch ${batch + 1}")
 
     while (retryCount < config.jdbcConnectionRetry && data == null) {
-      val connectionResult = Try {
+      try {
         val readStartTime = System.currentTimeMillis()
         val authenticationData: Map[String, String] =  JSONUtil.deserialize(cipherUtil.decrypt(connectorConfig.authenticationMechanism.encryptedValues), classOf[Map[String, String]])
         val result =  spark.read.format("jdbc")
@@ -44,22 +45,40 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
             .load()
 
         batchReadTime = System.currentTimeMillis() - readStartTime
-        result
-      }
-
-      connectionResult match {
-        case Failure(exception) =>
-          logger.error(s"Database Connection failed. Retrying (${retryCount + 1}/${config.jdbcConnectionRetry})...", exception)
+        EventGenerator.generateFetchMetric(config, dataset, batch + 1, result.count(), dsSourceConfig, metrics, batchReadTime)
+        data = result
+      } catch {
+        case exception: Exception =>
           retryCount += 1
-          DatasetRegistry.updateConnectorDisconnections(dsSourceConfig.datasetId, retryCount)
-          if (retryCount == config.jdbcConnectionRetry) break
-          Thread.sleep(config.jdbcConnectionRetryDelay)
-        case util.Success(df) =>
-          EventGenerator.generateFetchMetric(config, dataset, batch, df.count(), dsSourceConfig, metrics, batchReadTime)
-          data = df
+          exceptionHandler(dsSourceConfig, retryCount, exception, metrics, batch + 1)
       }
     }
     data
+  }
+
+  private def exceptionHandler(dsSourceConfig: DatasetSourceConfig, retryCount: Int, exception: Throwable, metrics: MetricsHelper, batch: Int): Unit = {
+    val error = getExceptionMessage(exception)
+    logger.error(s"$error :: Retrying (${retryCount}/${config.jdbcConnectionRetry} :: Exception: ${exception.getMessage}")
+    exception.printStackTrace()
+    DatasetRegistry.updateConnectorDisconnections(dsSourceConfig.datasetId, retryCount)
+    EventGenerator.generateErrorMetric(config, dsSourceConfig, metrics, retryCount, batch, error, exception.getMessage)
+    if (retryCount == config.jdbcConnectionRetry) break
+    Thread.sleep(config.jdbcConnectionRetryDelay)
+  }
+
+  private def getExceptionMessage(exception: Throwable): String = {
+    exception.getMessage match {
+      case msg if msg.contains("authentication failed") => "Invalid authentication details"
+      case _ =>
+        exception.getClass.toString match {
+          case cls if cls.contains("javax.crypto") => "Error while decrypting the authentication details"
+          case _ =>
+            exception match {
+              case _: UnknownHostException => "Database Connection failed"
+              case _: Exception => "Error while fetching data from database"
+            }
+        }
+    }
   }
 
   def processRecords(config: JDBCConnectorConfig, dataset: DatasetModels.Dataset, batch: Int, data: DataFrame, dsSourceConfig: DatasetSourceConfig, metrics: MetricsHelper): Unit = {
