@@ -59,8 +59,9 @@ object JDBCConnectorJob extends Serializable {
       logger.info(s"Completed processing dataset: ${dataSourceConfig.datasetId} :: Total number of records are pulled: $eventCount")
       dataSourceConfig
     } catch {
-      case exception: Exception =>
-        EventGenerator.generateErrorMetric(config, dataSourceConfig, metrics, "Error while processing the JDBC Connector Job", exception.getMessage, dataset.dataVersion)
+      case ex: Exception =>
+        ex.printStackTrace()
+        EventGenerator.generateErrorMetric(config, dataSourceConfig, metrics, "Error while processing the JDBC Connector Job", ex.getMessage, dataset.dataVersion)
     }
   }
 
