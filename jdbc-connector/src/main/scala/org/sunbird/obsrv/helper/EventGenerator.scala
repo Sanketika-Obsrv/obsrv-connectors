@@ -51,7 +51,8 @@ object EventGenerator {
       MetricLabel("databaseType", dsSourceConfig.connectorConfig.databaseType),
       MetricLabel("databaseName", dsSourceConfig.connectorConfig.databaseName),
       MetricLabel("tableName", dsSourceConfig.connectorConfig.tableName),
-      MetricLabel("batchSize", String.valueOf(dsSourceConfig.connectorConfig.batchSize))
+      MetricLabel("batchSize", String.valueOf(dsSourceConfig.connectorConfig.batchSize)),
+      MetricLabel("metricsVersion", config.metricsVersion)
     )
   }
 
