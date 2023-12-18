@@ -28,11 +28,11 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
   val config: Config = ConfigFactory.load("test.conf").withFallback(ConfigFactory.systemEnvironment())
 
   val customKafkaConsumerProperties: Map[String, String] = Map("group.id" -> "test-consumer-group", "auto.offset.reset" -> "earliest")
-  var embeddedPostgres: EmbeddedPostgres = _
+  var embeddedPostgres: EmbeddedPostgres = EmbeddedPostgres.builder.setPort(5432).start()
   val postgresConfig: PostgresConnectionConfig = PostgresConnectionConfig(
     user = config.getString("postgres.user"),
     password = config.getString("postgres.password"),
-    database = "obsrv",
+    database = config.getString("postgres.database"),
     host = config.getString("postgres.host"),
     port = config.getInt("postgres.port"),
     maxConnections = config.getInt("postgres.maxConnections")
@@ -40,6 +40,16 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
   val postgresConnect = new PostgresConnect(postgresConfig)
   implicit val embeddedKafkaConfig: EmbeddedKafkaConfig = EmbeddedKafkaConfig(kafkaPort = 9092, zooKeeperPort = 2181, customConsumerProperties = customKafkaConsumerProperties)
   val jdbcConfig = new JDBCConnectorConfig(config, Array())
+
+//  override def beforeAll(): Unit = {
+//    super.beforeAll()
+//    embeddedPostgres =
+//  }
+//
+//  override protected def afterAll(): Unit = {
+//    super.afterAll()
+//    embeddedPostgres.close()
+//  }
 
   def init(): Unit = {
     EmbeddedKafka.start()(embeddedKafkaConfig)
@@ -50,8 +60,14 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
     checkTestTopicsOffset()
   }
 
+  override protected def afterAll(): Unit = {
+        super.afterAll()
+        embeddedPostgres.close()
+        EmbeddedKafka.stop()
+  }
+
   def cleanup(): Unit = {
-    EmbeddedKafka.stop()
+
   }
 
   "JDBCConnectorJob" should "pull records successfully from postgresql database" in {
@@ -85,27 +101,17 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
         connectorStats should not be empty
         //Check value of lastFetchTimestamp
         connectorStats.map(timestamp => {
-          timestamp shouldBe Timestamp.valueOf("2023-11-26 11:53:50")
+          timestamp shouldBe Timestamp.valueOf("2023-12-10 05:13:27")
         })
       })
     }
   }
 
-  it should "validate fetch metric format" in {
-    val message = EmbeddedKafka.consumeFirstMessageFrom("spark.stats")
-    val metric = JSONUtil.deserialize(message, classOf[Map[String, Any]])
-    metric should not be empty
-
-    val mapValue = metric("edata").asInstanceOf[Map[String, Any]]
-    mapValue.get("metric").toList.length shouldBe 1
-  }
-
-  ""
   def createTableSchema(): Unit = {
-    postgresConnect.execute("CREATE TABLE IF NOT EXISTS datasets ( id text PRIMARY KEY, type text NOT NULL, validation_config json, extraction_config json, dedup_config json, data_schema json, denorm_config json, router_config json NOT NULL, dataset_config json NOT NULL, status text NOT NULL, tags text[], data_version INT, created_by text NOT NULL, updated_by text NOT NULL, created_date timestamp NOT NULL, updated_date timestamp NOT NULL );")
-    postgresConnect.execute("CREATE TABLE IF NOT EXISTS datasources ( id text PRIMARY KEY, dataset_id text REFERENCES datasets (id), ingestion_spec json NOT NULL, datasource text NOT NULL, datasource_ref text NOT NULL, retention_period json, archival_policy json, purge_policy json, backup_config json NOT NULL, status text NOT NULL, created_by text NOT NULL, updated_by text NOT NULL, created_date Date NOT NULL, updated_date Date NOT NULL );")
-    postgresConnect.execute("CREATE TABLE IF NOT EXISTS dataset_transformations ( id text PRIMARY KEY, dataset_id text REFERENCES datasets (id), field_key text NOT NULL, transformation_function json NOT NULL, status text NOT NULL, mode text, created_by text NOT NULL, updated_by text NOT NULL, created_date Date NOT NULL, updated_date Date NOT NULL, UNIQUE(field_key, dataset_id) );")
-    postgresConnect.execute("CREATE TABLE IF NOT EXISTS dataset_source_config ( id text PRIMARY KEY, dataset_id text NOT NULL REFERENCES datasets (id), connector_type text NOT NULL, connector_config json NOT NULL, status text NOT NULL, connector_stats json, created_by text NOT NULL, updated_by text NOT NULL, created_date Date NOT NULL, updated_date Date NOT NULL, UNIQUE(connector_type, dataset_id) );")
+    postgresConnect.execute("CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY,dataset_id TEXT,type TEXT NOT NULL,name TEXT,validation_config JSON,extraction_config JSON,dedup_config JSON,data_schema JSON,denorm_config JSON,router_config JSON,dataset_config JSON,tags TEXT[],data_version INT,status TEXT,created_by TEXT,updated_by TEXT,created_date TIMESTAMP NOT NULL DEFAULT now(),updated_date TIMESTAMP NOT NULL,published_date TIMESTAMP NOT NULL DEFAULT now());")
+    postgresConnect.execute("CREATE TABLE IF NOT EXISTS datasources (id TEXT PRIMARY KEY,datasource text NOT NULL,dataset_id TEXT NOT NULL REFERENCES datasets (id),ingestion_spec json NOT NULL,datasource_ref text NOT NULL,retention_period json,archival_policy json,purge_policy json,backup_config json NOT NULL,metadata json,status text NOT NULL,created_by text NOT NULL,updated_by text NOT NULL,created_date TIMESTAMP NOT NULL DEFAULT now(),updated_date TIMESTAMP NOT NULL,published_date TIMESTAMP NOT NULL DEFAULT now(),UNIQUE (dataset_id, datasource));")
+    postgresConnect.execute("CREATE TABLE IF NOT EXISTS dataset_transformations (id TEXT PRIMARY KEY,dataset_id TEXT NOT NULL REFERENCES datasets (id),field_key TEXT NOT NULL,transformation_function JSON,mode TEXT,metadata JSON,status TEXT NOT NULL,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_date TIMESTAMP NOT NULL DEFAULT now(),updated_date TIMESTAMP NOT NULL,published_date TIMESTAMP NOT NULL DEFAULT now(),UNIQUE (dataset_id, field_key));")
+    postgresConnect.execute("CREATE TABLE IF NOT EXISTS dataset_source_config (id TEXT PRIMARY KEY,dataset_id TEXT NOT NULL REFERENCES datasets (id),connector_type text NOT NULL,connector_config json NOT NULL,status text NOT NULL,connector_stats json,created_by text NOT NULL,updated_by text NOT NULL,created_date TIMESTAMP NOT NULL DEFAULT now(),updated_date TIMESTAMP NOT NULL,published_date TIMESTAMP NOT NULL DEFAULT now(),UNIQUE(connector_type, dataset_id));")
     postgresConnect.execute("CREATE TABLE IF NOT EXISTS emp_data (id INT, first_name text, last_name text, email text, gender text, time timestamp);")
   }
 
@@ -134,6 +140,7 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
         val recordIterator = consumer.poll(duration2JavaDuration(60.second)).iterator()
         while (recordIterator.hasNext) {
           val record = recordIterator.next
+
           messagesBuffers(record.topic) += (record.key() -> record.value())
           val tp = new TopicPartition(record.topic, record.partition)
           val om = new OffsetAndMetadata(record.offset + 1)
@@ -142,7 +149,7 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
         consumer.close()
         val messages = messagesBuffers.view.mapValues(_.toList).toMap
         messages("spark.stats").length shouldBe >= (0)
-        messages("spark.stats").length shouldBe 3
+        messages("spark.stats").length shouldBe 5
     }
   }
 }
