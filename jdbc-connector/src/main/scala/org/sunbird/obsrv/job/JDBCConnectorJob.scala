@@ -55,7 +55,7 @@ object JDBCConnectorJob extends Serializable {
           if (recordCount == 0 || validateMaxSize(eventCount, config.eventMaxLimit)) {
             break
           } else {
-            helper.processRecords(config, dataset, batch, data, eventCount, dataSourceConfig, metrics)
+            helper.processRecords(config, dataset, batch, data, recordCount, dataSourceConfig, metrics)
             eventCount += recordCount
           }
         }
