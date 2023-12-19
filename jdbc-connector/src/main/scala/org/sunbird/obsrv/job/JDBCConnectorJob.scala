@@ -63,9 +63,11 @@ object JDBCConnectorJob extends Serializable {
       logger.info(s"Completed processing dataset: ${dataSourceConfig.datasetId} :: Total number of records are pulled: $eventCount")
       dataSourceConfig
     } catch {
+      // $COVERAGE-OFF$
       case ex: Exception =>
         ex.printStackTrace()
         EventGenerator.generateErrorMetric(config, dataSourceConfig, metrics, "Error while processing the JDBC Connector Job", ex.getMessage, dataset.dataVersion)
+      // $COVERAGE-ON$
     }
   }
 

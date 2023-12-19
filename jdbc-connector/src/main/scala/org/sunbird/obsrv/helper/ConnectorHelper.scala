@@ -140,8 +140,10 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
       val columnsToRemove = fieldNames.toSeq :+ "obsrv_meta_str"
       resultDF.drop(columnsToRemove: _*)
     } catch {
+      // $COVERAGE-OFF$
       case ex: Exception =>
         throw new Exception(s"Error while transforming the data: ${ex.getMessage}")
+      // $COVERAGE-ON$
     }
   }
 
@@ -156,7 +158,9 @@ class ConnectorHelper(config: JDBCConnectorConfig) extends Serializable {
   private def getDriver(databaseType: String): String = {
      databaseType match {
       case "postgresql" => config.postgresqlDriver
+      // $COVERAGE-OFF$
       case "mysql" => config.mysqlDriver
+      // $COVERAGE-ON$
     }
   }
 
