@@ -180,14 +180,14 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
   }
 
   "JDBCConnectorJob" should "Generate failed metrics" in {
-    val postgresConnect = new PostgresConnect(externalDbConfig)
+    val postgresConnect = new PostgresConnect(postgresConfig)
     insertData(postgresConnect = postgresConnect)
     val datasets = DatasetRegistry.getAllDatasets("dataset")
     val datasetSourceConfigs = DatasetRegistry.getAllDatasetSourceConfig()
     JDBCConnectorJob.main(Array())
     assert(datasetSourceConfigs.get.size equals 2)
     assert(datasets.size equals 2)
-    val messages = checkTestTopicsOffset("spark.stats", 3)
+    val messages = checkTestTopicsOffset("spark.stats", 8)
     var metric = JSONUtil.deserialize(messages.head, classOf[JobMetric])
     // Validate fetch metric
     assert(metric.edata.metric("batch_count").asInstanceOf[Int] equals 1)
