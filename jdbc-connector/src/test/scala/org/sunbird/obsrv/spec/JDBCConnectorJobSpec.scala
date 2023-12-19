@@ -176,10 +176,7 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
     assert(datasetSourceConfigs.get.size equals 2)
     assert(datasets.size equals 2)
     val messages = checkTestTopicsOffset("spark.stats", 12)
-//    assert (messages.size equals 12)
     var metric = JSONUtil.deserialize(messages.head, classOf[JobMetric])
-
-    println("Successful Metrics" + messages)
 
     // Validate fetch metric
     assert(metric.edata.metric("batch_count").asInstanceOf[Int] equals 1)
@@ -207,36 +204,5 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
     assert(datasetSourceConfigs.get.size equals 5)
     assert(datasets.size equals 5)
     val messages = checkTestTopicsOffset("spark.stats", 15)
-//    var metric = JSONUtil.deserialize(messages.head, classOf[JobMetric])
-//
-//    messages.foreach(println)
-//
-//    assert(metric.edata.metric("batch_count").asInstanceOf[Int] equals 1)
-//    assert(metric.edata.metric("failure_count").asInstanceOf[Int] equals 1)
   }
-
-  // "Decryption" should "throw exception" in {
-  //   //Invalid Authentication details
-  //   val cipherUtil = new CipherUtil(config)
-  //   intercept[Exception] {
-  //     val authenticationData: Map[String, String] = JSONUtil.deserialize(cipherUtil.decrypt(EventFixture.invalidEncryptedAuthenticationvalues), classOf[Map[String, String]])
-  //   }
-  //   //Decryption failure
-  // }
-
-//  "JDBCConectorJob" should "check lastRowTimestamp" in {
-//    val simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-//    simpleDateFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
-//    val datasetSourceConfig = DatasetRegistry.getDatasetSourceConfigById("jdbc_test")
-//    datasetSourceConfig.map { configList =>
-//      configList.map(config => {
-//        val connectorStats = config.connectorStats.map(_.lastFetchTimestamp)
-//        connectorStats should not be empty
-//        //Check value of lastFetchTimestamp
-//        connectorStats.map(timestamp => {
-//          timestamp shouldBe Timestamp.valueOf("2023-12-10 05:13:27")
-//        })
-//      })
-//    }
-//  }
 }
