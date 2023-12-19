@@ -1,25 +1,18 @@
 package org.sunbird.obsrv.spec
 
 import com.typesafe.config.{Config, ConfigFactory}
-import org.apache.kafka.common.serialization.StringDeserializer
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig, duration2JavaDuration}
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres
+import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.Matchers._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import org.sunbird.obsrv.core.util.{PostgresConnect, PostgresConnectionConfig}
 import org.sunbird.obsrv.fixture.EventFixture
-import org.sunbird.obsrv.helper.MetricsHelper
 import org.sunbird.obsrv.job.{JDBCConnectorConfig, JDBCConnectorJob}
+import org.sunbird.obsrv.model.JobMetric
 import org.sunbird.obsrv.registry.DatasetRegistry
-import org.sunbird.obsrv.model.{Edata, JobMetric, MetricLabel}
 import org.sunbird.obsrv.util.{CipherUtil, JSONUtil}
-import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
-import org.joda.time.{DateTime, DateTimeZone}
 
-import java.sql.Timestamp
-import java.text.SimpleDateFormat
-import java.util
-import java.util.TimeZone
 import scala.collection.JavaConverters._
 import scala.collection.compat._
 import scala.collection.mutable.ListBuffer
@@ -195,21 +188,14 @@ class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAft
     assert(metric.edata.metric("fetched_time_in_ms").asInstanceOf[Number].longValue() > 0L)
   }
 
-//  "Decryption" should "succeed" in {
-//    val cipherUtil = new CipherUtil(jdbcConfig)
-//    val authenticationData: Map[String, String] = JSONUtil.deserialize(cipherUtil.decrypt(EventFixture.validEncryptedAuthenticationValues), classOf[Map[String, String]])
-//    assert(authenticationData.contains("username"))
-//    assert(authenticationData.contains("password"))
-//  }
-
-//  "Decryption" should "throw exception" in {
-//    //Invalid Authentication details
-//    val cipherUtil = new CipherUtil(jdbcConfig)
-//    intercept[Exception] {
-//      val authenticationData: Map[String, String] = JSONUtil.deserialize(cipherUtil.decrypt(EventFixture.invalidEncryptedAuthenticationvalues), classOf[Map[String, String]])
-//    }
-//    //Decryption failure
-//  }
+  "Decryption" should "throw exception" in {
+    //Invalid Authentication details
+    val cipherUtil = new CipherUtil(config)
+    intercept[Exception] {
+      val authenticationData: Map[String, String] = JSONUtil.deserialize(cipherUtil.decrypt(EventFixture.invalidEncryptedAuthenticationvalues), classOf[Map[String, String]])
+    }
+    //Decryption failure
+  }
 
 //  "JDBCConectorJob" should "check lastRowTimestamp" in {
 //    val simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
