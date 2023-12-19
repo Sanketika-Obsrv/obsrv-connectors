@@ -29,7 +29,6 @@ import scala.concurrent.duration._
 class JDBCConnectorJobSpec extends FlatSpec with EmbeddedKafka with BeforeAndAfterAll {
   val appConfig: Config = ConfigFactory.load("test.conf").withFallback(ConfigFactory.systemEnvironment())
   val config = new JDBCConnectorConfig(appConfig, Array())
-  val mockMetrics: MetricsHelper = mock[MetricsHelper]
 
   val postgresConfig: PostgresConnectionConfig = PostgresConnectionConfig(
     user = appConfig.getString("postgres.user"),
