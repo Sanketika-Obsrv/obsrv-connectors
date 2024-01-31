@@ -22,8 +22,16 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
   // $COVERAGE-OFF$ Disabling scoverage as the below code can only be invoked within flink cluster
   def process(): Unit = {
     implicit val env: StreamExecutionEnvironment = FlinkUtil.getExecutionContext(config)
+    env.execute(config.jobName)
+  }
 
-    val datasetSourceConfig = DatasetRegistry.getDatasetSourceConfig()
+  override def processStream(dataStream: DataStream[String]): DataStream[String] = {
+    null
+  }
+  // $COVERAGE-ON$
+
+  def process(env: StreamExecutionEnvironment): Unit = {
+    val datasetSourceConfig = DatasetRegistry.getAllDatasetSourceConfig()
     datasetSourceConfig.map { configList =>
       configList.filter(_.connectorType.equalsIgnoreCase("kafka")).map {
         dataSourceConfig =>
@@ -31,24 +39,22 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
             getStringDataStream(env, config, List(dataSourceConfig.connectorConfig.topic),
             config.kafkaConsumerProperties(kafkaBrokerServers = Some(dataSourceConfig.connectorConfig.kafkaBrokers),
               kafkaConsumerGroup = Some(s"kafka-${dataSourceConfig.connectorConfig.topic}-consumer")),
-              consumerSourceName = s"kafka-${dataSourceConfig.connectorConfig.topic}", kafkaConnector)
+            consumerSourceName = s"kafka-${dataSourceConfig.connectorConfig.topic}", kafkaConnector)
           val datasetId = dataSourceConfig.datasetId
           val kafkaOutputTopic = DatasetRegistry.getDataset(datasetId).get.datasetConfig.entryTopic
-          val resultMapStream: DataStream[String] = dataStream
-            .filter{msg: String => JSONUtil.isJSON(msg)}.returns(classOf[String]) // TODO: Add a metric to capture invalid JSON messages
-            .map { streamMap: String => {
-              val mutableMap = JSONUtil.deserialize[mutable.Map[String, AnyRef]](streamMap)
+          val resultStream: DataStream[String] = dataStream
+          .map { streamData: String => {
+            val mutableMap = JSONUtil.deserialize[mutable.Map[String, AnyRef]](streamData)
               mutableMap.put("dataset", datasetId)
               mutableMap.put("syncts", java.lang.Long.valueOf(new DateTime(DateTimeZone.UTC).getMillis))
               addObsrvMeta(mutableMap, dataSourceConfig)
               JSONUtil.serialize(mutableMap)
-            }
+          }
           }.returns(classOf[String])
-          resultMapStream.sinkTo(kafkaConnector.kafkaStringSink(kafkaOutputTopic))
+          resultStream.sinkTo(kafkaConnector.kafkaSink[String](kafkaOutputTopic))
             .name(s"$datasetId-kafka-connector-sink").uid(s"$datasetId-kafka-connector-sink")
             .setParallelism(config.downstreamOperatorsParallelism)
       }
-      env.execute(config.jobName)
     }
   }
 
@@ -71,10 +77,6 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
     ))
   }
 
-  override def processStream(dataStream: DataStream[String]): DataStream[String] = {
-    null
-  }
-  // $COVERAGE-ON$
 }
 
 // $COVERAGE-OFF$ Disabling scoverage as the below code can only be invoked within flink cluster
