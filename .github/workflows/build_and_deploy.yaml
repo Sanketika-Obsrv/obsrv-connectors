@@ -34,12 +34,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: 
+          name: Download artifacts
           path: https://github.com/Sanketika-Obsrv/obsrv-core/actions/runs/7796585848/artifacts/*
 
       - name: Build obsrv core repository
         run: |
-          cd obsrv-connectors/obsrv-core
+          # cd obsrv-connectors/obsrv-core
           mvn clean install -DskipTests
 
       - name: Run test case when raised a PR
