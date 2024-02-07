@@ -19,7 +19,7 @@ jobs:
       with:
         repository: Sanketika-Obsrv/obsrv-core
         path: obsrv-connectors/obsrv-core
-        ref: 1.0.2-GA
+        ref: develop
       
     - name: Build obsrv core repository
       run: |
