@@ -14,17 +14,17 @@ jobs:
       with:
         fetch-depth: 0
       
-    - name: Clone obsrv core repository
-      uses: actions/checkout@v3
-      with:
-        repository: Sanketika-Obsrv/obsrv-core
-        path: obsrv-connectors/obsrv-core
-        ref: fix-kafka-connector-issue
+    # - name: Clone obsrv core repository
+    #   uses: actions/checkout@v3
+    #   with:
+    #     repository: Sanketika-Obsrv/obsrv-core
+    #     path: obsrv-connectors/obsrv-core
+    #     ref: fix-kafka-connector-issue
       
-    - name: Build obsrv core repository
-      run: |
-        cd obsrv-connectors/obsrv-core
-        mvn clean install -DskipTests
+    # - name: Build obsrv core repository
+    #   run: |
+    #     cd obsrv-connectors/obsrv-core
+    #     mvn clean install -DskipTests
       
     - name: Run test case when raised a PR
       run: |
