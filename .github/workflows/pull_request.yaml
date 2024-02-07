@@ -15,7 +15,7 @@ jobs:
         fetch-depth: 0
       
     - name: Clone obsrv core repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: Sanketika-Obsrv/obsrv-core
         path: obsrv-connectors/obsrv-core
@@ -25,7 +25,7 @@ jobs:
       run: |
         cd obsrv-connectors/obsrv-core
         mvn clean install -DskipTests    
-        
+
     - name: Run test case when raised a PR
       run: |
         cd ./jdbc-connector
