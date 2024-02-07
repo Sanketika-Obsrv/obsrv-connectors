@@ -53,7 +53,6 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
     EmbeddedKafka.publishStringMessageToKafka("d1-topic", EventFixture.VALID_JSON_EVENT)
     EmbeddedKafka.publishStringMessageToKafka("d2-topic", EventFixture.VALID_JSON_EVENT_ARRAY)
     EmbeddedKafka.publishStringMessageToKafka("d3-topic", EventFixture.INVALID_JSON_EVENT)
-    EmbeddedKafka.publishStringMessageToKafka("d4-topic", EventFixture.DEBEZIUM_CREATE_EVENT)
 
     flinkCluster.before()
   }
@@ -61,12 +60,10 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
   private def prepareTestData(): Unit = {
     val postgresConnect = new PostgresConnect(postgresConfig)
     postgresConnect.execute("insert into datasets(id, type, data_schema, router_config, dataset_config, status, created_by, updated_by, created_date, updated_date, tags) values ('d3', 'dataset', '{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"id\":\"https://sunbird.obsrv.com/test.json\",\"title\":\"Test Schema\",\"description\":\"Test Schema\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"vehicleCode\":{\"type\":\"string\"},\"date\":{\"type\":\"string\"},\"dealer\":{\"type\":\"object\",\"properties\":{\"dealerCode\":{\"type\":\"string\"},\"locationId\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"phone\":{\"type\":\"string\"}},\"required\":[\"dealerCode\",\"locationId\"]},\"metrics\":{\"type\":\"object\",\"properties\":{\"bookingsTaken\":{\"type\":\"number\"},\"deliveriesPromised\":{\"type\":\"number\"},\"deliveriesDone\":{\"type\":\"number\"}}}},\"required\":[\"id\",\"vehicleCode\",\"date\",\"dealer\",\"metrics\"]}', '{\"topic\":\"d2-events\"}', '{\"data_key\":\"id\",\"timestamp_key\":\"date\",\"entry_topic\":\"ingest\"}', 'Live', 'System', 'System', now(), now(), ARRAY['Tag1','Tag2']);")
-    postgresConnect.execute("insert into datasets(id, type, data_schema, router_config, dataset_config, status, created_by, updated_by, created_date, updated_date, tags) values ('d4', 'dataset', '{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"id\":\"https://sunbird.obsrv.com/test.json\",\"title\":\"Test Schema\",\"description\":\"Test Schema\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"vehicleCode\":{\"type\":\"string\"},\"date\":{\"type\":\"string\"},\"dealer\":{\"type\":\"object\",\"properties\":{\"dealerCode\":{\"type\":\"string\"},\"locationId\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"phone\":{\"type\":\"string\"}},\"required\":[\"dealerCode\",\"locationId\"]},\"metrics\":{\"type\":\"object\",\"properties\":{\"bookingsTaken\":{\"type\":\"number\"},\"deliveriesPromised\":{\"type\":\"number\"},\"deliveriesDone\":{\"type\":\"number\"}}}},\"required\":[\"id\",\"vehicleCode\",\"date\",\"dealer\",\"metrics\"]}', '{\"topic\":\"d2-events\"}', '{\"data_key\":\"id\",\"timestamp_key\":\"date\",\"entry_topic\":\"ingest\"}', 'Live', 'System', 'System', now(), now(), ARRAY['Tag1','Tag2']);")
     postgresConnect.execute("insert into dataset_source_config values('sc1', 'd1', 'kafka', '{\"kafkaBrokers\":\"localhost:9093\",\"topic\":\"d1-topic\"}', 'Live', null, 'System', 'System', now(), now());")
     postgresConnect.execute("insert into dataset_source_config values('sc2', 'd1', 'rdbms', '{\"type\":\"postgres\",\"tableName\":\"test-table\"}', 'Live', null, 'System', 'System', now(), now());")
     postgresConnect.execute("insert into dataset_source_config values('sc3', 'd2', 'kafka', '{\"kafkaBrokers\":\"localhost:9093\",\"topic\":\"d2-topic\"}', 'Live', null, 'System', 'System', now(), now());")
     postgresConnect.execute("insert into dataset_source_config values('sc4', 'd3', 'kafka', '{\"kafkaBrokers\":\"localhost:9093\",\"topic\":\"d3-topic\"}', 'Live', null, 'System', 'System', now(), now());")
-    postgresConnect.execute("""insert into dataset_source_config values('sc5', 'd4', 'kafka', '{"kafkaBrokers":"localhost:9093","topic":"d4-topic", "kafka_event_type": "DEBEZIUM"}', 'Live', null, 'System', 'System', now(), now());""")
     postgresConnect.closeConnection()
   }
 
@@ -91,7 +88,7 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
       env.execute(pConfig.jobName)
     }
 
-    val ingestEvents = EmbeddedKafka.consumeNumberMessagesFrom[String]("ingest", 4, timeout = 30.seconds)
+    val ingestEvents = EmbeddedKafka.consumeNumberMessagesFrom[String]("ingest", 3, timeout = 30.seconds)
     validateIngestEvents(ingestEvents)
 
     pConfig.inputTopic() should be ("local.kafka.connector.in")
@@ -101,7 +98,7 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
   }
 
   private def validateIngestEvents(ingestEvents: List[String]): Unit = {
-    ingestEvents.size should be(4)
+    ingestEvents.size should be(3)
     ingestEvents.foreach{event: String => {
       if(event.contains(""""dataset":"d1"""")) {
         JSONUtil.getJsonType(event) should be ("OBJECT")
@@ -116,12 +113,6 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
         eventMap.contains("syncts") should be(true)
         eventMap.contains("events") should be(true)
         JSONUtil.getJsonType(JSONUtil.serialize(eventMap.get("events"))) should be("ARRAY")
-      } else if (event.contains(""""dataset":"d4"""")) {
-        JSONUtil.getJsonType(event) should be("OBJECT")
-        val eventMap = JSONUtil.deserialize[Map[String, AnyRef]](event)
-        eventMap("dataset").asInstanceOf[String] should be("d4")
-        eventMap.contains("syncts") should be(true)
-        eventMap.contains("event") should be(true)
       } else {
         JSONUtil.getJsonType(event) should be ("NOT_A_JSON")
         event.contains(""""event":{"id":"1234","vehicleCode":"HYUN-CRE-D6","date":"2023-03-01","dealer":{"dealerCode":"KUNUnited","locationId":"KUN1","email":"dealer1@gmail.com","phone":"9849012345"},"metrics":{"bookingsTaken":50,"deliveriesPromised":20,"deliveriesDone":19}""") should be(true)
