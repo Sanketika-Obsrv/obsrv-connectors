@@ -26,7 +26,7 @@ jobs:
         cd obsrv-connectors/obsrv-core
         mvn clean install -DskipTests
       
-            - name: Run test case when raised a PR
-              run: |
-                cd ./jdbc-connector
-                mvn clean install
+    - name: Run test case when raised a PR
+      run: |
+        cd ./jdbc-connector
+        mvn clean install
