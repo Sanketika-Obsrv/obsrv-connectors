@@ -19,7 +19,7 @@ jobs:
       with:
         repository: Sanketika-Obsrv/obsrv-core
         path: obsrv-connectors/obsrv-core
-        ref: develop
+        ref: fix-kafka-connector-issue
       
     - name: Build obsrv core repository
       run: |
