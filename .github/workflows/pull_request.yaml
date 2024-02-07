@@ -1,0 +1,32 @@
+name: Pull Request
+run-name: Workflow run for pull request - ${{ github.event.pull_request.title }}
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+jobs:      
+  run-test-cases:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      
+    - name: Clone obsrv core repository
+      uses: actions/checkout@v3
+      with:
+        repository: Sanketika-Obsrv/obsrv-core
+        path: obsrv-connectors/obsrv-core
+        ref: 1.0.2-GA
+      
+    - name: Build obsrv core repository
+      run: |
+        cd obsrv-connectors/obsrv-core
+        mvn clean install -DskipTests
+      
+            - name: Run test case when raised a PR
+              run: |
+                cd ./jdbc-connector
+                mvn clean install
