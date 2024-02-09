@@ -55,14 +55,16 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
           resultStream.sinkTo(kafkaConnector.kafkaSink[String](kafkaOutputTopic))
             .name(s"$datasetId-kafka-connector-sink").uid(s"$datasetId-kafka-connector-sink")
             .setParallelism(config.downstreamOperatorsParallelism)
-      }
-    }.orElse {
-      val dataStreamSink: DataStreamSink[String] = getStringDataStream(env, config, kafkaConnector)
-        .sinkTo(kafkaConnector.kafkaSink[String](config.kafkaDefaultOutputTopic))
-        .name(s"kafka-connector-default-sink").uid(s"kafka-connector-default-sink")
-        .setParallelism(config.downstreamOperatorsParallelism)
-      Some(dataStreamSink)
-    }
+      }.orElse(List(addDefaultOperator(env, config, kafkaConnector)))
+    }.orElse(Some(addDefaultOperator(env, config, kafkaConnector)))
+  }
+
+  def addDefaultOperator(env: StreamExecutionEnvironment, config: KafkaConnectorConfig, kafkaConnector: FlinkKafkaConnector): DataStreamSink[String] = {
+    val dataStreamSink: DataStreamSink[String] = getStringDataStream(env, config, kafkaConnector)
+      .sinkTo(kafkaConnector.kafkaSink[String](config.kafkaDefaultOutputTopic))
+      .name(s"kafka-connector-default-sink").uid(s"kafka-connector-default-sink")
+      .setParallelism(config.downstreamOperatorsParallelism)
+    dataStreamSink
   }
 }
 

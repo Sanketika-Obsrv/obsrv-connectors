@@ -75,11 +75,11 @@ class KafkaConnectorStreamTestSpec extends BaseSpecWithDatasetRegistry {
 
   def createTestTopics(): Unit = {
     List(
-      "d1-topic", "d2-topic", "d3-topic", "d4-topic", pConfig.kafkaSystemTopic, "ingest"
+      "d1-topic", "d2-topic", "d3-topic", pConfig.kafkaSystemTopic, "ingest", "local.kafka.connector.in"
     ).foreach(EmbeddedKafka.createCustomTopic(_))
   }
 
-  "KafkaConnectorStreamTestSpec" should "validate the kafka connector job" in {
+  "KafkaConnectorStreamTest" should "validate the kafka connector job" in {
 
     implicit val env: StreamExecutionEnvironment = FlinkUtil.getExecutionContext(pConfig)
     val task = new KafkaConnectorStreamTask(pConfig, kafkaConnector)
