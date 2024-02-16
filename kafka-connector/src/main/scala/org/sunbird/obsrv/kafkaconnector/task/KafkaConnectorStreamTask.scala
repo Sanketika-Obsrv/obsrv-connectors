@@ -9,7 +9,6 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.obsrv.core.streaming.{BaseStreamTask, FlinkKafkaConnector}
 import org.sunbird.obsrv.core.util.{FlinkUtil, JSONUtil}
-import org.sunbird.obsrv.kafkaconnector.functions.KafkaEventTransformerFunction
 import org.sunbird.obsrv.registry.DatasetRegistry
 
 import java.io.File
@@ -43,19 +42,6 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
           val datasetId = dataSourceConfig.datasetId
           val kafkaOutputTopic = DatasetRegistry.getDataset(datasetId).get.datasetConfig.entryTopic
           val resultStream: DataStream[String] = {
-            // Kafka Connector Implementation for Debezium Type events
-            if (dataSourceConfig.connectorConfig.kafkaEventType.isDefined) {
-              val transformationStream = dataStream.process(new KafkaEventTransformerFunction(config))
-                .setParallelism(config.downstreamOperatorsParallelism)
-              transformationStream.getSideOutput(config.successTag()).map {
-                event =>
-                  val syncts = java.lang.Long.valueOf(new DateTime(DateTimeZone.UTC).getMillis)
-                  s"""{"dataset":"$datasetId","syncts":$syncts,"event":$event}"""
-              }
-            }
-            // Kafka Connector Implementation for normal String type events
-            else {
-              // val resultStream: DataStream[String] = dataStream.map { streamData: String => {
               dataStream.map {
                 streamData: String => {
                   val syncts = java.lang.Long.valueOf(new DateTime(DateTimeZone.UTC).getMillis)
@@ -65,20 +51,20 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
                   }
                 }
               }.returns(classOf[String])
-            }
           }
           resultStream.sinkTo(kafkaConnector.kafkaSink[String](kafkaOutputTopic))
             .name(s"$datasetId-kafka-connector-sink").uid(s"$datasetId-kafka-connector-sink")
             .setParallelism(config.downstreamOperatorsParallelism)
+      }.orElse(List(addDefaultOperator(env, config, kafkaConnector)))
+    }.orElse(Some(addDefaultOperator(env, config, kafkaConnector)))
+  }
 
-      }
-    }.orElse {
-      val dataStreamSink: DataStreamSink[String] = getStringDataStream(env, config, kafkaConnector)
-        .sinkTo(kafkaConnector.kafkaSink[String](config.kafkaDefaultOutputTopic))
-        .name(s"kafka-connector-default-sink").uid(s"kafka-connector-default-sink")
-        .setParallelism(config.downstreamOperatorsParallelism)
-      Some(dataStreamSink)
-    }
+  def addDefaultOperator(env: StreamExecutionEnvironment, config: KafkaConnectorConfig, kafkaConnector: FlinkKafkaConnector): DataStreamSink[String] = {
+    val dataStreamSink: DataStreamSink[String] = getStringDataStream(env, config, kafkaConnector)
+      .sinkTo(kafkaConnector.kafkaSink[String](config.kafkaDefaultOutputTopic))
+      .name(s"kafka-connector-default-sink").uid(s"kafka-connector-default-sink")
+      .setParallelism(config.downstreamOperatorsParallelism)
+    dataStreamSink
   }
 }
 
