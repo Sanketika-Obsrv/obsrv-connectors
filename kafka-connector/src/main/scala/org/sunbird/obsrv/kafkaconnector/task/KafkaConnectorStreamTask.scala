@@ -9,6 +9,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment
 import org.joda.time.{DateTime, DateTimeZone}
 import org.sunbird.obsrv.core.streaming.{BaseStreamTask, FlinkKafkaConnector}
 import org.sunbird.obsrv.core.util.{FlinkUtil, JSONUtil}
+import org.sunbird.obsrv.model.{DatasetModels, DatasetStatus}
 import org.sunbird.obsrv.registry.DatasetRegistry
 
 import java.io.File
@@ -31,14 +32,14 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
   // $COVERAGE-ON$
 
   def process(env: StreamExecutionEnvironment): Unit = {
-    val datasetSourceConfig = DatasetRegistry.getAllDatasetSourceConfig()
+    val datasetSourceConfig: Option[List[DatasetModels.DatasetSourceConfig]] = DatasetRegistry.getAllDatasetSourceConfig()
     datasetSourceConfig.map { configList =>
-      configList.filter(_.connectorType.equalsIgnoreCase("kafka")).map {
+      configList.filter(config => config.connectorType.equalsIgnoreCase("kafka") && config.status.equals(DatasetStatus.Live)).map {
         dataSourceConfig =>
           val dataStream: DataStream[String] = getStringDataStream(env, config, List(dataSourceConfig.connectorConfig.topic),
             config.kafkaConsumerProperties(kafkaBrokerServers = Some(dataSourceConfig.connectorConfig.kafkaBrokers),
               kafkaConsumerGroup = Some(s"kafka-${dataSourceConfig.connectorConfig.topic}-consumer")),
-            consumerSourceName = s"kafka-${dataSourceConfig.connectorConfig.topic}", kafkaConnector)
+            consumerSourceName = s"kafka-${dataSourceConfig.datasetId}-${dataSourceConfig.connectorConfig.topic}", kafkaConnector)
           val datasetId = dataSourceConfig.datasetId
           val kafkaOutputTopic = DatasetRegistry.getDataset(datasetId).get.datasetConfig.entryTopic
           val resultStream: DataStream[String] = {
