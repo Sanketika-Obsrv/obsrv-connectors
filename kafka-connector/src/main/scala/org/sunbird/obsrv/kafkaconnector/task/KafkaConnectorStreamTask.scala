@@ -34,7 +34,7 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
   def process(env: StreamExecutionEnvironment): Unit = {
     val datasetSourceConfig: Option[List[DatasetModels.DatasetSourceConfig]] = DatasetRegistry.getAllDatasetSourceConfig()
     datasetSourceConfig.map { configList =>
-      configList.filter(config => config.connectorType.equalsIgnoreCase("kafka") && config.status.equals(DatasetStatus.Live)).map {
+      configList.filter(config => config.connectorType.equalsIgnoreCase("kafka") && config.status.equals(DatasetStatus.Live.toString)).map {
         dataSourceConfig =>
           val dataStream: DataStream[String] = getStringDataStream(env, config, List(dataSourceConfig.connectorConfig.topic),
             config.kafkaConsumerProperties(kafkaBrokerServers = Some(dataSourceConfig.connectorConfig.kafkaBrokers),
