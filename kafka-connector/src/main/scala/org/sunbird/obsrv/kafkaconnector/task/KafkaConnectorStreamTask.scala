@@ -41,17 +41,17 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
               kafkaConsumerGroup = Some(s"kafka-${dataSourceConfig.connectorConfig.topic}-consumer")),
             consumerSourceName = s"kafka-${dataSourceConfig.datasetId}-${dataSourceConfig.connectorConfig.topic}", kafkaConnector)
           val datasetId = dataSourceConfig.datasetId
-          val kafkaOutputTopic = DatasetRegistry.getDataset(datasetId).get.datasetConfig.entryTopic
+          val kafkaOutputTopic = DatasetRegistry.getDataset(datasetId).get.entryTopic
           val resultStream: DataStream[String] = {
-              dataStream.map {
-                streamData: String => {
-                  val syncts = java.lang.Long.valueOf(new DateTime(DateTimeZone.UTC).getMillis)
-                  JSONUtil.getJsonType(streamData) match {
-                    case "ARRAY" => s"""{"dataset":"$datasetId","syncts":$syncts,"events":$streamData}"""
-                    case _ => s"""{"dataset":"$datasetId","syncts":$syncts,"event":$streamData}"""
-                  }
+            dataStream.map {
+              streamData: String => {
+                val syncts = java.lang.Long.valueOf(new DateTime(DateTimeZone.UTC).getMillis)
+                JSONUtil.getJsonType(streamData) match {
+                  case "ARRAY" => s"""{"dataset":"$datasetId","syncts":$syncts,"events":$streamData}"""
+                  case _ => s"""{"dataset":"$datasetId","syncts":$syncts,"event":$streamData}"""
                 }
-              }.returns(classOf[String])
+              }
+            }.returns(classOf[String])
           }
           resultStream.sinkTo(kafkaConnector.kafkaSink[String](kafkaOutputTopic))
             .name(s"$datasetId-kafka-connector-sink").uid(s"$datasetId-kafka-connector-sink")
@@ -60,7 +60,7 @@ class KafkaConnectorStreamTask(config: KafkaConnectorConfig, kafkaConnector: Fli
     }.orElse(Some(addDefaultOperator(env, config, kafkaConnector)))
   }
 
-  def addDefaultOperator(env: StreamExecutionEnvironment, config: KafkaConnectorConfig, kafkaConnector: FlinkKafkaConnector): DataStreamSink[String] = {
+  private def addDefaultOperator(env: StreamExecutionEnvironment, config: KafkaConnectorConfig, kafkaConnector: FlinkKafkaConnector): DataStreamSink[String] = {
     val dataStreamSink: DataStreamSink[String] = getStringDataStream(env, config, kafkaConnector)
       .sinkTo(kafkaConnector.kafkaSink[String](config.kafkaDefaultOutputTopic))
       .name(s"kafka-connector-default-sink").uid(s"kafka-connector-default-sink")
